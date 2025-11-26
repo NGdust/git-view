@@ -4,11 +4,18 @@ import { GitService, BranchInfo, CommitInfo } from '../git/gitService';
 export class GitViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'gitPluginView';
     private _view?: vscode.WebviewView;
+    private _gitService?: GitService;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly _gitService: GitService
-    ) {}
+        gitService?: GitService
+    ) {
+        this._gitService = gitService;
+    }
+    
+    public setGitService(gitService: GitService) {
+        this._gitService = gitService;
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -80,13 +87,16 @@ export class GitViewProvider implements vscode.WebviewViewProvider {
             }
         });
 
-        if (this._gitService) {
+        if (this._gitService && this._view) {
             this.refresh();
         }
     }
 
     public async refresh() {
         if (!this._gitService || !this._view) {
+            if (!this._gitService) {
+                console.log('Git Plugin: GitService not available yet');
+            }
             return;
         }
         try {
@@ -106,7 +116,7 @@ export class GitViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async selectCommit(commitHash: string) {
-        if (this._view) {
+        if (this._view && this._gitService) {
             const diff = await this._gitService.getWorkingTreeDiff(commitHash);
             this._view.webview.postMessage({
                 command: 'showDiff',
@@ -117,7 +127,7 @@ export class GitViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async searchCommits(query: string) {
-        if (this._view) {
+        if (this._view && this._gitService) {
             const commits = await this._gitService.getCommits(1000);
             const filtered = commits.filter(c =>
                 c.message.toLowerCase().includes(query.toLowerCase()) ||

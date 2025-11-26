@@ -8,33 +8,54 @@ let gitViewProvider: GitViewProvider;
 export function activate(context: vscode.ExtensionContext) {
     console.log('Git Plugin: Activating extension...');
     
+    // Сначала регистрируем провайдер, даже если нет workspace
+    // Это важно, чтобы view мог загрузиться
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showWarningMessage('Git Plugin: No workspace folder found. Please open a workspace folder.');
-        return;
-    }
-
-    const workspaceRoot = workspaceFolders[0].uri.fsPath;
-    console.log('Git Plugin: Workspace root:', workspaceRoot);
+    let workspaceRoot: string | undefined;
     
-    gitService = new GitService(workspaceRoot);
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        workspaceRoot = workspaceFolders[0].uri.fsPath;
+        console.log('Git Plugin: Workspace root:', workspaceRoot);
+        gitService = new GitService(workspaceRoot);
+    } else {
+        console.log('Git Plugin: No workspace folder found, creating placeholder service');
+        // Создаем временный сервис, который будет заменен позже
+        gitService = new GitService(process.cwd());
+    }
+    
     gitViewProvider = new GitViewProvider(context.extensionUri, gitService);
 
-    // Регистрируем провайдер для view - важно использовать правильный viewType
+    // Регистрируем провайдер для view СИНХРОННО - это критически важно!
     console.log('Git Plugin: Registering view provider with viewType:', GitViewProvider.viewType);
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(
-            GitViewProvider.viewType,
-            gitViewProvider,
-            {
-                webviewOptions: {
-                    retainContextWhenHidden: true
-                }
+    const provider = vscode.window.registerWebviewViewProvider(
+        GitViewProvider.viewType,
+        gitViewProvider,
+        {
+            webviewOptions: {
+                retainContextWhenHidden: true
             }
-        )
+        }
     );
+    context.subscriptions.push(provider);
     
-    console.log('Git Plugin: Extension activated successfully');
+    console.log('Git Plugin: Extension activated successfully, provider registered');
+    
+    // Если workspace появится позже, обновим сервис
+    if (!workspaceRoot) {
+        const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            const folders = vscode.workspace.workspaceFolders;
+            if (folders && folders.length > 0 && !workspaceRoot) {
+                workspaceRoot = folders[0].uri.fsPath;
+                workspaceRoot = folders[0].uri.fsPath;
+                gitService = new GitService(workspaceRoot);
+                if (gitViewProvider) {
+                    gitViewProvider.setGitService(gitService);
+                }
+                console.log('Git Plugin: Workspace folder added, service updated');
+            }
+        });
+        context.subscriptions.push(disposable);
+    }
 
     context.subscriptions.push(
         vscode.commands.registerCommand('gitPlugin.openView', () => {
