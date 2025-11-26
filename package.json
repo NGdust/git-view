@@ -1,0 +1,141 @@
+{
+  "name": "git-plugin-vc",
+  "displayName": "Git Plugin (JetBrains Style)",
+  "description": "Git клиент для VS Code в стиле JetBrains IDE",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:gitPlugin.openView",
+    "onView:gitPlugin.gitPluginView"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gitPlugin",
+          "title": "Git Plugin",
+          "icon": "$(git-branch)"
+        }
+      ]
+    },
+    "views": {
+      "gitPlugin": [
+        {
+          "id": "gitPluginView",
+          "name": "Git Log"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitPlugin.openView",
+        "title": "Open Git Log",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitPlugin.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitPlugin.checkout",
+        "title": "Checkout"
+      },
+      {
+        "command": "gitPlugin.createBranch",
+        "title": "New Branch from..."
+      },
+      {
+        "command": "gitPlugin.compare",
+        "title": "Compare with..."
+      },
+      {
+        "command": "gitPlugin.showDiff",
+        "title": "Show Diff with Working Tree"
+      },
+      {
+        "command": "gitPlugin.rebase",
+        "title": "Rebase..."
+      },
+      {
+        "command": "gitPlugin.merge",
+        "title": "Merge..."
+      },
+      {
+        "command": "gitPlugin.push",
+        "title": "Push..."
+      },
+      {
+        "command": "gitPlugin.pull",
+        "title": "Update"
+      },
+      {
+        "command": "gitPlugin.rename",
+        "title": "Rename..."
+      },
+      {
+        "command": "gitPlugin.delete",
+        "title": "Delete"
+      },
+      {
+        "command": "gitPlugin.cherryPick",
+        "title": "Cherry-Pick"
+      },
+      {
+        "command": "gitPlugin.revert",
+        "title": "Revert Commit"
+      },
+      {
+        "command": "gitPlugin.reset",
+        "title": "Reset Current Branch to Here..."
+      },
+      {
+        "command": "gitPlugin.copyRevision",
+        "title": "Copy Revision Number"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitPlugin.refresh",
+          "when": "view == gitPluginView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitPlugin.checkout",
+          "when": "view == gitPluginView && viewItem == branch",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "simple-git": "^3.19.1"
+  }
+}
+
