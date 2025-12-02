@@ -109,12 +109,20 @@ function render() {
       if (isSelected) {
         item.classList.add("commit-selected");
       }
+      if (commit.isMerge) {
+        item.classList.add("commit-merge");
+      }
 
       const timeline = document.createElement("div");
       timeline.className = "commit-timeline";
 
       const dot = document.createElement("div");
       dot.className = "commit-dot";
+      const color = getColorForCommit(commit.hash);
+      dot.style.borderColor = color;
+      dot.style.backgroundColor = state.selectedCommits.includes(commit.hash)
+        ? color
+        : "transparent";
       timeline.appendChild(dot);
 
       const line = document.createElement("div");
@@ -122,6 +130,7 @@ function render() {
       if (isLast) {
         line.classList.add("commit-line--last");
       }
+      line.style.backgroundColor = color;
       timeline.appendChild(line);
 
       const content = document.createElement("div");
@@ -410,6 +419,15 @@ function createCurrentBranchIcon() {
 
 let currentContextMenu;
 let lastSelectedCommitHash;
+const laneColors = [
+  "#8be9fd",
+  "#ffb86c",
+  "#50fa7b",
+  "#bd93f9",
+  "#ff79c6",
+  "#f1fa8c",
+  "#ff5555",
+];
 
 function openBranchContextMenu(x, y, branch) {
   closeContextMenu();
@@ -664,6 +682,18 @@ function getCurrentCommits() {
   const commits =
     state.commitsByBranch && state.commitsByBranch[state.currentBranch];
   return Array.isArray(commits) ? commits : [];
+}
+
+function getColorForCommit(hash) {
+  if (!hash || !laneColors.length) {
+    return "var(--vscode-editor-foreground)";
+  }
+  let acc = 0;
+  for (let i = 0; i < hash.length; i += 1) {
+    acc = (acc * 31 + hash.charCodeAt(i)) >>> 0;
+  }
+  const idx = acc % laneColors.length;
+  return laneColors[idx];
 }
 
 

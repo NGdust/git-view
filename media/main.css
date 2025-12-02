@@ -203,6 +203,15 @@ body {
   color: var(--vscode-list-activeSelectionForeground);
 }
 
+.commit-merge .commit-title,
+.commit-merge .commit-meta {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.commit-merge .commit-dot {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 
 
 
