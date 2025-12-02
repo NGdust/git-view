@@ -989,6 +989,30 @@ function renderFileTree(node, container, level) {
     row.className = "details-file";
     row.style.paddingLeft = `${indent + 12}px`;
     row.textContent = file;
+
+    const fullPath = node.path ? `${node.path}/${file}` : file;
+
+    row.onclick = (event) => {
+      event.stopPropagation();
+      const details = state.commitDetails;
+      if (details && details.commit) {
+        vscode.postMessage({
+          type: "openDiff",
+          hash: details.commit.hash,
+          file: fullPath,
+        });
+      }
+    };
+
+    row.oncontextmenu = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      vscode.postMessage({
+        type: "openFileSource",
+        file: fullPath,
+      });
+    };
+
     container.appendChild(row);
   });
 }

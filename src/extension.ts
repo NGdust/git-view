@@ -63,6 +63,12 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         case "commitAction":
           await this.handleCommitAction(message.action, message.commits);
           break;
+        case "openDiff":
+          await this.openDiffForFile(message.hash, message.file);
+          break;
+        case "openFileSource":
+          await this.openFileInEditor(message.file);
+          break;
         case "requestCommitDetails":
           await this.sendCommitDetails(message.hash);
           break;
@@ -299,6 +305,54 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to load commit details", error);
+    }
+  }
+
+  private async openDiffForFile(
+    hash: string,
+    relativePath: string,
+  ): Promise<void> {
+    try {
+      const diffText = await this.git.getDiffForFile(hash, relativePath);
+      if (!diffText) {
+        void vscode.window.showWarningMessage(
+          `Нет diff для файла ${relativePath} в коммите ${hash.slice(0, 7)}`,
+        );
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument({
+        content: diffText,
+        language: "diff",
+      });
+      await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Неизвестная ошибка diff";
+      // eslint-disable-next-line no-console
+      console.error("Git diff failed", error);
+      void vscode.window.showErrorMessage(
+        `Git Panel: не удалось открыть diff (${message})`,
+      );
+    }
+  }
+
+  private async openFileInEditor(relativePath: string): Promise<void> {
+    try {
+      const workspaceFolderUri =
+        vscode.workspace.workspaceFolders?.[0]?.uri ?? undefined;
+      if (!workspaceFolderUri) {
+        return;
+      }
+      const uri = vscode.Uri.joinPath(workspaceFolderUri, relativePath);
+      await vscode.window.showTextDocument(uri, { preview: false });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Не удалось открыть файл";
+      // eslint-disable-next-line no-console
+      console.error("Open file failed", error);
+      void vscode.window.showErrorMessage(
+        `Git Panel: ${message} (${relativePath})`,
+      );
     }
   }
 

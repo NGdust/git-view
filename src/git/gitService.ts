@@ -226,6 +226,34 @@ export class GitService {
 
     return { hash, files };
   }
+
+  public async getDiffForFile(hash: string, filePath: string): Promise<string> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return "";
+    }
+
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", hash, "--", filePath],
+      { cwd: this.cwd },
+    );
+
+    return stdout;
+  }
+
+  public async getFileContentAt(ref: string, filePath: string): Promise<string> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return "";
+    }
+
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", `${ref}:${filePath}`],
+      { cwd: this.cwd },
+    );
+
+    return stdout;
+  }
 }
 
 
