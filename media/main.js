@@ -1,436 +1,663 @@
+/* global acquireVsCodeApi */
+
 const vscode = acquireVsCodeApi();
 
-let branches = { local: [], remote: [] };
-let commits = [];
-let tags = [];
-let selectedBranch = null;
-let selectedCommit = null;
-let contextMenu = null;
+const root = document.getElementById("root");
 
-document.addEventListener('DOMContentLoaded', () => {
-    contextMenu = document.getElementById('contextMenu');
-    
-    setupSearch();
-    setupEventListeners();
-    
-    window.addEventListener('message', (event) => {
-        const message = event.data;
-        switch (message.command) {
-            case 'update':
-                branches = message.branches;
-                commits = message.commits;
-                tags = message.tags;
-                renderBranches();
-                renderCommits();
-                renderTags();
-                break;
-            case 'updateCommits':
-                commits = message.commits;
-                renderCommits();
-                break;
-            case 'showDiff':
-                showDiff(message.diff, message.commitHash);
-                break;
-        }
+/** @type {{
+  branches: string[];
+  commitsByBranch: Record<string, any[]>;
+  currentBranch?: string;
+  expandedFolders?: Record<string, boolean>;
+  selectedCommits?: string[];
+}} */
+let state = {
+  branches: [],
+  commitsByBranch: {},
+  currentBranch: undefined,
+  expandedFolders: {},
+  selectedCommits: [],
+};
+
+function render() {
+  root.innerHTML = "";
+
+  const container = document.createElement("div");
+  container.className = "container";
+  container.style.display = "flex";
+  container.style.width = "100%";
+  container.style.height = "100%";
+
+  const branchesColumn = document.createElement("div");
+  branchesColumn.className = "column";
+
+  const branchesHeader = document.createElement("div");
+  branchesHeader.className = "column-header";
+  branchesHeader.textContent = "Branches";
+  branchesColumn.appendChild(branchesHeader);
+
+  const branchesList = document.createElement("div");
+  branchesList.className = "list";
+
+  if (state.branches.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Локальные ветки не найдены.";
+    branchesList.appendChild(empty);
+  } else {
+    if (!state.expandedFolders) {
+      state.expandedFolders = {};
+    }
+
+    const { mainBranch, root } = buildBranchTree(state.branches);
+
+    // main всегда сверху
+    if (mainBranch) {
+      const mainItem = createBranchItem({
+        fullName: mainBranch,
+        label: mainBranch,
+        level: 0,
+        isMain: true,
+      });
+      branchesList.appendChild(mainItem);
+    }
+
+    renderBranchTree(root, branchesList, 0);
+  }
+
+  branchesColumn.appendChild(branchesList);
+
+  const commitsColumn = document.createElement("div");
+  commitsColumn.className = "column";
+
+  const commitsHeader = document.createElement("div");
+  commitsHeader.className = "column-header";
+  commitsHeader.textContent = "Commits";
+  commitsColumn.appendChild(commitsHeader);
+
+  const commitsList = document.createElement("div");
+  commitsList.className = "list";
+
+  const commits =
+    (state.currentBranch && state.commitsByBranch[state.currentBranch]) || [];
+
+  if (!state.currentBranch) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Выберите ветку, чтобы увидеть коммиты.";
+    commitsList.appendChild(empty);
+  } else if (commits.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Коммиты не найдены.";
+    commitsList.appendChild(empty);
+  } else {
+    commits.forEach((commit, index) => {
+      const isLast = index === commits.length - 1;
+      const isSelected =
+        Array.isArray(state.selectedCommits) &&
+        state.selectedCommits.includes(commit.hash);
+
+      const item = document.createElement("div");
+      item.className = "item commit-row";
+      if (isSelected) {
+        item.classList.add("commit-selected");
+      }
+
+      const timeline = document.createElement("div");
+      timeline.className = "commit-timeline";
+
+      const dot = document.createElement("div");
+      dot.className = "commit-dot";
+      timeline.appendChild(dot);
+
+      const line = document.createElement("div");
+      line.className = "commit-line";
+      if (isLast) {
+        line.classList.add("commit-line--last");
+      }
+      timeline.appendChild(line);
+
+      const content = document.createElement("div");
+      content.className = "commit-content";
+
+      const top = document.createElement("div");
+      top.className = "commit-top";
+
+      const title = document.createElement("div");
+      title.className = "commit-title";
+      title.textContent = commit.subject;
+
+      const meta = document.createElement("div");
+      meta.className = "commit-meta";
+      meta.textContent = formatCommitMeta(commit);
+
+      top.appendChild(title);
+      top.appendChild(meta);
+
+      content.appendChild(top);
+
+      item.appendChild(timeline);
+      item.appendChild(content);
+
+      item.onclick = (event) => {
+        handleCommitClick(commit.hash, event);
+      };
+
+      item.oncontextmenu = (event) => {
+        event.preventDefault();
+        openCommitContextMenu(event.clientX, event.clientY, commit.hash);
+      };
+
+      commitsList.appendChild(item);
     });
+  }
+
+  commitsColumn.appendChild(commitsList);
+
+  container.appendChild(branchesColumn);
+  container.appendChild(commitsColumn);
+
+  root.appendChild(container);
+}
+
+function createBranchItem(options) {
+  const { fullName, label, level, isMain } = options;
+
+  const item = document.createElement("div");
+  item.className = "item";
+  if (isMain) {
+    item.style.fontWeight = "600";
+  }
+  item.style.paddingLeft = `${8 + level * 8}px`;
+
+  const isCurrent = fullName === state.currentBranch;
+  if (isCurrent) {
+    item.classList.add("selected");
+  }
+
+  const row = document.createElement("div");
+  row.className = isCurrent ? "current-branch-row" : "";
+
+  const labelEl = document.createElement("span");
+  labelEl.textContent = label;
+  if (isCurrent) {
+    labelEl.className = "current-branch-label";
+  }
+
+  if (isCurrent) {
+    const icon = createCurrentBranchIcon();
+    row.appendChild(icon);
+  }
+
+  row.appendChild(labelEl);
+
+  item.appendChild(row);
+
+  item.onclick = () => {
+    vscode.postMessage({ type: "selectBranch", branch: fullName });
+  };
+
+   item.oncontextmenu = (event) => {
+    event.preventDefault();
+    openBranchContextMenu(event.clientX, event.clientY, fullName);
+  };
+
+  return item;
+}
+
+function buildBranchTree(branchNames) {
+  /** @type {string | undefined} */
+  let mainBranch = undefined;
+
+  const others = [];
+  branchNames.forEach((name) => {
+    if (name === "main") {
+      mainBranch = name;
+    } else {
+      others.push(name);
+    }
+  });
+
+  function createNode(name, path) {
+    return {
+      name,
+      path,
+      folders: new Map(),
+      branches: [],
+    };
+  }
+
+  const root = createNode("", "");
+
+  others.forEach((fullName) => {
+    const parts = fullName.split("/");
+    if (parts.length === 1) {
+      root.branches.push({ fullName, label: fullName });
+      return;
+    }
+
+    const leafLabel = parts[parts.length - 1];
+    let node = root;
+
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const part = parts[i];
+      const childPath = node.path ? `${node.path}/${part}` : part;
+      let child = node.folders.get(part);
+      if (!child) {
+        child = createNode(part, childPath);
+        node.folders.set(part, child);
+      }
+      node = child;
+    }
+
+    node.branches.push({ fullName, label: leafLabel });
+  });
+
+  function sortNode(node) {
+    node.branches.sort((a, b) => a.label.localeCompare(b.label));
+
+    const entries = Array.from(node.folders.entries());
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    node.folders = new Map(entries);
+
+    node.folders.forEach((child) => sortNode(child));
+  }
+
+  sortNode(root);
+
+  return { mainBranch, root };
+}
+
+function renderBranchTree(node, container, level) {
+  // сначала отдельные ветки этого уровня
+  node.branches.forEach((branch) => {
+    const item = createBranchItem({
+      fullName: branch.fullName,
+      label: branch.label,
+      level,
+      isMain: false,
+    });
+    container.appendChild(item);
+  });
+
+  // затем папки
+  node.folders.forEach((child) => {
+    const id = child.path || child.name;
+    const isExpanded = !!state.expandedFolders[id];
+
+    const row = document.createElement("div");
+    row.className = "item folder-item";
+    row.style.paddingLeft = `${8 + level * 8}px`;
+
+    const arrow = document.createElement("span");
+    arrow.className = "folder-arrow";
+    arrow.textContent = isExpanded ? "▾" : "▸";
+
+    const icon = createFolderIcon();
+
+    const name = document.createElement("span");
+    name.className = "folder-name";
+    name.textContent = child.name;
+
+    row.appendChild(arrow);
+    row.appendChild(icon);
+    row.appendChild(name);
+
+    row.onclick = () => {
+      if (!state.expandedFolders) {
+        state.expandedFolders = {};
+      }
+      state.expandedFolders[id] = !state.expandedFolders[id];
+      render();
+    };
+
+    container.appendChild(row);
+
+    if (isExpanded) {
+      renderBranchTree(child, container, level + 1);
+    }
+  });
+}
+
+window.addEventListener("message", (event) => {
+  const message = event.data;
+  switch (message.type) {
+    case "state":
+      // запомним прошлую ветку, чтобы можно было сбросить выделение при смене
+      {
+        const prevBranch = state.currentBranch;
+        const payload = message.payload || {};
+        state = {
+          ...state,
+          ...payload,
+        };
+        if (payload.currentBranch && payload.currentBranch !== prevBranch) {
+          state.selectedCommits = [];
+        }
+      }
+      render();
+      break;
+    default:
+      break;
+  }
 });
 
-function setupSearch() {
-    const searchInput = document.getElementById('searchInput');
-    let searchTimeout;
-    
-    searchInput.addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        const query = e.target.value;
-        
-        searchTimeout = setTimeout(() => {
-            if (query.trim()) {
-                vscode.postMessage({
-                    command: 'search',
-                    query: query
-                });
-            } else {
-                vscode.postMessage({
-                    command: 'refresh'
-                });
-            }
-        }, 300);
-    });
-}
+// запросить начальные данные
+vscode.postMessage({ type: "init" });
 
-function setupEventListeners() {
-    document.addEventListener('click', (e) => {
-        if (!contextMenu.contains(e.target)) {
-            hideContextMenu();
-        }
-    });
-    
-    document.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-    });
-}
-
-function renderBranches() {
-    const localContainer = document.getElementById('localBranches');
-    const remoteContainer = document.getElementById('remoteBranches');
-    
-    localContainer.innerHTML = '';
-    remoteContainer.innerHTML = '';
-    
-    // Группируем локальные ветки по префиксу (например, vgarganchuk/)
-    const localGroups = groupBranchesByPrefix(branches.local);
-    if (localGroups.default.length > 0 || Object.keys(localGroups.groups).length > 0) {
-        // Показываем ветки без префикса
-        localGroups.default.forEach(branch => {
-            const item = createBranchItem(branch, 'local');
-            localContainer.appendChild(item);
-        });
-        
-        // Показываем сгруппированные ветки
-        Object.keys(localGroups.groups).sort().forEach(prefix => {
-            const group = document.createElement('div');
-            group.className = 'branch-group-item';
-            const groupTitle = document.createElement('div');
-            groupTitle.className = 'group-title';
-            groupTitle.textContent = prefix;
-            group.appendChild(groupTitle);
-            
-            const list = document.createElement('div');
-            list.className = 'branch-list';
-            
-            localGroups.groups[prefix].forEach(branch => {
-                const item = createBranchItem(branch, 'local');
-                list.appendChild(item);
-            });
-            
-            group.appendChild(list);
-            localContainer.appendChild(group);
-        });
+function formatCommitMeta(commit) {
+  let date = commit.date || "";
+  if (date) {
+    const parts = date.split(" ");
+    if (parts.length >= 2) {
+      // YYYY-MM-DD HH:MM:SS [+TZ] -> берём только дату и время
+      date = `${parts[0]} ${parts[1]}`;
     }
-    
-    const remoteGroups = groupBranchesByRemote(branches.remote);
-    Object.keys(remoteGroups).forEach(remoteName => {
-        const group = document.createElement('div');
-        group.className = 'remote-group';
-        const groupTitle = document.createElement('div');
-        groupTitle.className = 'group-title';
-        groupTitle.textContent = remoteName;
-        group.appendChild(groupTitle);
-        
-        const list = document.createElement('div');
-        list.className = 'branch-list';
-        
-        // Группируем удаленные ветки по префиксу
-        const prefixGroups = groupBranchesByPrefix(remoteGroups[remoteName]);
-        prefixGroups.default.forEach(branch => {
-            const item = createBranchItem(branch, 'remote');
-            list.appendChild(item);
-        });
-        
-        Object.keys(prefixGroups.groups).sort().forEach(prefix => {
-            const prefixGroup = document.createElement('div');
-            prefixGroup.className = 'branch-group-item';
-            const prefixTitle = document.createElement('div');
-            prefixTitle.className = 'group-title';
-            prefixTitle.textContent = prefix;
-            prefixGroup.appendChild(prefixTitle);
-            
-            const prefixList = document.createElement('div');
-            prefixList.className = 'branch-list';
-            
-            prefixGroups.groups[prefix].forEach(branch => {
-                const item = createBranchItem(branch, 'remote');
-                prefixList.appendChild(item);
-            });
-            
-            prefixGroup.appendChild(prefixList);
-            list.appendChild(prefixGroup);
-        });
-        
-        group.appendChild(list);
-        remoteContainer.appendChild(group);
-    });
+  }
+
+  const author = commit.author || "";
+
+  if (author && date) {
+    return `${author} - ${date}`;
+  }
+  if (author) {
+    return author;
+  }
+  return date;
 }
 
-function groupBranchesByPrefix(branchList) {
-    const groups = {};
-    const defaultBranches = [];
-    
-    branchList.forEach(branch => {
-        const parts = branch.name.split('/');
-        if (parts.length > 1) {
-            const prefix = parts[0];
-            if (!groups[prefix]) {
-                groups[prefix] = [];
-            }
-            groups[prefix].push(branch);
-        } else {
-            defaultBranches.push(branch);
-        }
-    });
-    
-    return { default: defaultBranches, groups };
+function createFolderIcon() {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 12");
+  svg.setAttribute("class", "folder-icon");
+
+  const path = document.createElementNS(svgNS, "path");
+  path.setAttribute(
+    "d",
+    "M2 3a1 1 0 0 1 1-1h3l1.2 1.2A1 1 0 0 0 7.9 3.5H13a1 1 0 0 1 1 1v4.5A1.5 1.5 0 0 1 12.5 10h-9A1.5 1.5 0 0 1 2 8.5V3Z",
+  );
+
+  svg.appendChild(path);
+  return svg;
 }
 
-function groupBranchesByRemote(remoteBranches) {
-    const groups = {};
-    remoteBranches.forEach(branch => {
-        const parts = branch.name.split('/');
-        const remote = parts[0];
-        if (!groups[remote]) {
-            groups[remote] = [];
-        }
-        groups[remote].push(branch);
-    });
-    return groups;
+function createCurrentBranchIcon() {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 10 10");
+  svg.setAttribute("class", "current-branch-icon");
+
+  const path = document.createElementNS(svgNS, "path");
+  // жёлтый кружок
+  path.setAttribute("d", "M5 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z");
+
+  svg.appendChild(path);
+  return svg;
 }
 
-function createBranchItem(branch, type) {
-    const item = document.createElement('div');
-    item.className = `branch-item ${branch.current ? 'current' : ''}`;
-    item.textContent = branch.name;
-    
-    if (branch.current) {
-        const star = document.createElement('span');
-        star.innerHTML = '★';
-        star.className = 'star-icon';
-        item.insertBefore(star, item.firstChild);
-    }
-    
-    item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectBranch(branch.name);
-    });
-    
-    item.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showBranchContextMenu(e, branch, type);
-    });
-    
-    return item;
-}
+let currentContextMenu;
+let lastSelectedCommitHash;
 
-function renderTags() {
-    const tagsContainer = document.getElementById('tags');
-    tagsContainer.innerHTML = '';
-    
-    tags.forEach(tag => {
-        const item = document.createElement('div');
-        item.className = 'tag-item';
-        item.innerHTML = `<span class="tag-icon">🏷</span>${tag}`;
-        tagsContainer.appendChild(item);
-    });
-}
+function openBranchContextMenu(x, y, branch) {
+  closeContextMenu();
 
-function renderCommits() {
-    const commitList = document.getElementById('commitList');
-    const commitGraph = document.getElementById('commitGraph');
-    
-    commitList.innerHTML = '';
-    commitGraph.innerHTML = '';
-    
-    commits.forEach((commit, index) => {
-        const graphDot = document.createElement('div');
-        graphDot.className = 'commit-graph-dot';
-        graphDot.style.left = '26px';
-        graphDot.style.top = `${index * 60 + 12}px`;
-        
-        const colors = ['#858585', '#4ec9b0', '#dcdcaa', '#c586c0', '#569cd6', '#ce9178'];
-        graphDot.style.backgroundColor = colors[index % colors.length];
-        
-        // Добавляем вертикальные линии между коммитами
-        if (index > 0) {
-            const line = document.createElement('div');
-            line.className = 'commit-graph-line';
-            line.style.left = '29px';
-            line.style.top = `${index * 60}px`;
-            line.style.width = '2px';
-            line.style.height = '60px';
-            line.style.backgroundColor = colors[(index - 1) % colors.length];
-            commitGraph.appendChild(line);
-        }
-        
-        commitGraph.appendChild(graphDot);
-        
-        const commitItem = document.createElement('div');
-        commitItem.className = 'commit-item';
-        commitItem.innerHTML = `
-            <div class="commit-message">
-                <div>${escapeHtml(commit.message)}</div>
-                <div class="commit-meta">
-                    <span class="commit-hash">${commit.shortHash}</span>
-                    <span>${commit.author}</span>
-                    <span>${commit.date}</span>
-                    ${commit.branches.length > 0 ? `
-                        <div class="commit-branches">
-                            ${commit.branches.map(b => `<span class="branch-badge">${escapeHtml(b)}</span>`).join('')}
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-        
-        commitItem.addEventListener('click', (e) => {
-            selectCommit(commit, e);
-        });
-        
-        commitItem.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            showCommitContextMenu(e, commit);
-        });
-        
-        commitList.appendChild(commitItem);
-    });
-}
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
 
-function selectBranch(branchName) {
-    selectedBranch = branchName;
-    document.querySelectorAll('.branch-item').forEach(item => {
-        item.classList.remove('selected');
-        if (item.textContent.includes(branchName)) {
-            item.classList.add('selected');
-        }
-    });
-}
-
-function selectCommit(commit, event) {
-    selectedCommit = commit;
-    document.querySelectorAll('.commit-item').forEach(item => {
-        item.classList.remove('selected');
-    });
-    if (event && event.currentTarget) {
-        event.currentTarget.classList.add('selected');
-    }
-    
+  const checkout = document.createElement("div");
+  checkout.className = "context-menu-item";
+  checkout.textContent = "Checkout";
+  checkout.onclick = () => {
     vscode.postMessage({
-        command: 'selectCommit',
-        commitHash: commit.hash
+      type: "branchAction",
+      action: "checkout",
+      branch,
     });
-}
+    closeContextMenu();
+  };
 
-function showBranchContextMenu(event, branch, type) {
-    const menuItems = [
-        { label: 'Checkout', command: 'checkout', shortcut: null },
-        { label: `New Branch from '${branch.name}'...`, command: 'createBranch', shortcut: null },
-        { separator: true },
-        { label: 'Update', command: 'pull', shortcut: null },
-        { label: 'Push...', command: 'push', shortcut: null },
-        { label: 'Rename...', command: 'rename', shortcut: 'F2' },
-        { label: 'Delete', command: 'delete', shortcut: null }
-    ];
-    
-    if (type === 'local' && selectedBranch && selectedBranch !== branch.name) {
-        menuItems.splice(2, 0, 
-            { label: `Checkout and Rebase onto '${branch.name}'`, command: 'rebase', shortcut: null },
-            { label: `Compare with '${branch.name}'`, command: 'compare', shortcut: null },
-            { label: 'Show Diff with Working Tree', command: 'showDiff', shortcut: null },
-            { separator: true },
-            { label: `Rebase '${branch.name}' onto '${selectedBranch}'`, command: 'rebase', shortcut: null },
-            { label: `Merge '${selectedBranch}' into '${branch.name}'`, command: 'merge', shortcut: null }
-        );
+  const newBranch = document.createElement("div");
+  newBranch.className = "context-menu-item";
+  newBranch.textContent = "New branch";
+  newBranch.onclick = () => {
+    vscode.postMessage({
+      type: "branchAction",
+      action: "newBranch",
+      branch,
+    });
+    closeContextMenu();
+  };
+
+  const del = document.createElement("div");
+  del.className = "context-menu-item";
+  del.textContent = "Delete";
+  del.onclick = () => {
+    vscode.postMessage({
+      type: "branchAction",
+      action: "delete",
+      branch,
+    });
+    closeContextMenu();
+  };
+
+  const pull = document.createElement("div");
+  pull.className = "context-menu-item";
+  pull.textContent = "Pull";
+  pull.onclick = () => {
+    vscode.postMessage({
+      type: "branchAction",
+      action: "pull",
+      branch,
+    });
+    closeContextMenu();
+  };
+
+  const push = document.createElement("div");
+  push.className = "context-menu-item";
+  push.textContent = "Push";
+  push.onclick = () => {
+    vscode.postMessage({
+      type: "branchAction",
+      action: "push",
+      branch,
+    });
+    closeContextMenu();
+  };
+
+  menu.appendChild(checkout);
+  menu.appendChild(newBranch);
+  menu.appendChild(del);
+  menu.appendChild(pull);
+  menu.appendChild(push);
+
+  document.body.appendChild(menu);
+  currentContextMenu = menu;
+
+  const rect = menu.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  const maxX = window.innerWidth - rect.width - 4;
+  const maxY = window.innerHeight - rect.height - 4;
+  if (left > maxX) left = maxX;
+  if (top > maxY) top = maxY;
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onAnyClick = (event) => {
+    if (!menu.contains(event.target)) {
+      closeContextMenu();
     }
-    
-    showContextMenu(event, menuItems, () => {
-        return { branch: branch.name };
+  };
+
+  window.addEventListener("mousedown", onAnyClick, { once: true });
+}
+
+function closeContextMenu() {
+  if (currentContextMenu && currentContextMenu.parentElement) {
+    currentContextMenu.parentElement.removeChild(currentContextMenu);
+  }
+  currentContextMenu = undefined;
+}
+
+function handleCommitClick(hash, event) {
+  if (!Array.isArray(state.selectedCommits)) {
+    state.selectedCommits = [];
+  }
+
+  const multi = event.metaKey || event.ctrlKey;
+  const range = event.shiftKey;
+
+  if (range && lastSelectedCommitHash && state.currentBranch) {
+    const commits = getCurrentCommits();
+    const startIndex = commits.findIndex(
+      (c) => c.hash === lastSelectedCommitHash,
+    );
+    const endIndex = commits.findIndex((c) => c.hash === hash);
+
+    if (startIndex !== -1 && endIndex !== -1) {
+      const [from, to] =
+        startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+      const rangeHashes = commits
+        .slice(from, to + 1)
+        .map((c) => c.hash)
+        .filter(Boolean);
+      state.selectedCommits = rangeHashes;
+    } else {
+      state.selectedCommits = [hash];
+    }
+  } else if (multi) {
+    if (state.selectedCommits.includes(hash)) {
+      state.selectedCommits = state.selectedCommits.filter((h) => h !== hash);
+    } else {
+      state.selectedCommits = [...state.selectedCommits, hash];
+    }
+  } else {
+    state.selectedCommits = [hash];
+  }
+
+  lastSelectedCommitHash = hash;
+  render();
+}
+
+function openCommitContextMenu(x, y, hash) {
+  if (!Array.isArray(state.selectedCommits)) {
+    state.selectedCommits = [];
+  }
+
+  if (!state.selectedCommits.includes(hash)) {
+    state.selectedCommits = [hash];
+  }
+
+  closeContextMenu();
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  const selected = state.selectedCommits || [];
+
+  const squash = document.createElement("div");
+  squash.className = "context-menu-item";
+  squash.textContent = "Squash Commits...";
+  if (selected.length < 2) {
+    squash.classList.add("context-menu-item--disabled");
+  } else {
+    squash.onclick = () => {
+      vscode.postMessage({
+        type: "commitAction",
+        action: "squash",
+        commits: selected,
+        branch: state.currentBranch,
+      });
+      closeContextMenu();
+    };
+  }
+
+  const reset = document.createElement("div");
+  reset.className = "context-menu-item";
+  reset.textContent = "Reset current branch to here";
+  reset.onclick = () => {
+    vscode.postMessage({
+      type: "commitAction",
+      action: "reset",
+      commits: [hash],
+      branch: state.currentBranch,
     });
-}
+    closeContextMenu();
+  };
 
-function showCommitContextMenu(event, commit) {
-    const menuItems = [
-        { label: 'Copy Revision Number', command: 'copy', shortcut: 'C' },
-        { label: 'Create Patch...', command: 'patch', shortcut: null },
-        { label: 'Cherry-Pick', command: 'cherryPick', shortcut: null },
-        { separator: true },
-        { label: 'Checkout Revision', command: 'checkout', shortcut: null },
-        { label: 'Show Repository at Revision', command: 'showRepo', shortcut: null },
-        { label: 'Compare with Local', command: 'compare', shortcut: null },
-        { separator: true },
-        { label: 'Reset Current Branch to Here...', command: 'reset', shortcut: null },
-        { label: 'Revert Commit', command: 'revert', shortcut: null },
-        { separator: true },
-        { label: 'Edit Commit Message...', command: 'edit', shortcut: 'F2' },
-        { label: 'Fixup...', command: 'fixup', shortcut: null },
-        { label: 'Squash Into...', command: 'squash', shortcut: null },
-        { separator: true },
-        { label: 'Drop Commits', command: 'drop', shortcut: null },
-        { label: 'Squash Commits...', command: 'squashAll', shortcut: null },
-        { label: 'Interactively Rebase from Here...', command: 'rebaseInteractive', shortcut: null },
-        { separator: true },
-        { label: 'Push All up to Here...', command: 'pushUpTo', shortcut: null },
-        { separator: true },
-        { label: 'New Branch...', command: 'createBranch', shortcut: null },
-        { label: 'New Tag...', command: 'createTag', shortcut: null },
-        { separator: true },
-        { label: 'Go to Child Commit', command: 'goToChild', shortcut: null },
-        { label: 'Go to Parent Commit', command: 'goToParent', shortcut: null },
-        { separator: true },
-        { label: 'Open on GitLab', command: 'openGitLab', shortcut: null }
-    ];
-    
-    showContextMenu(event, menuItems, () => {
-        return { commitHash: commit.hash };
+  const changeText = document.createElement("div");
+  changeText.className = "context-menu-item";
+  changeText.textContent = "Change text";
+  if (selected.length !== 1) {
+    changeText.classList.add("context-menu-item--disabled");
+  } else {
+    changeText.onclick = () => {
+      vscode.postMessage({
+        type: "commitAction",
+        action: "changeMessage",
+        commits: [hash],
+        branch: state.currentBranch,
+      });
+      closeContextMenu();
+    };
+  }
+
+  const cherryPick = document.createElement("div");
+  cherryPick.className = "context-menu-item";
+  cherryPick.textContent = "Cherry-Pick";
+  cherryPick.onclick = () => {
+    vscode.postMessage({
+      type: "commitAction",
+      action: "cherryPick",
+      commits: selected.length ? selected : [hash],
+      branch: state.currentBranch,
     });
+    closeContextMenu();
+  };
+
+  menu.appendChild(squash);
+  menu.appendChild(reset);
+  menu.appendChild(changeText);
+  menu.appendChild(cherryPick);
+
+  document.body.appendChild(menu);
+  currentContextMenu = menu;
+
+  const rect = menu.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  const maxX = window.innerWidth - rect.width - 4;
+  const maxY = window.innerHeight - rect.height - 4;
+  if (left > maxX) left = maxX;
+  if (top > maxY) top = maxY;
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onAnyClick = (e) => {
+    if (!menu.contains(e.target)) {
+      closeContextMenu();
+    }
+  };
+
+  window.addEventListener("mousedown", onAnyClick, { once: true });
 }
 
-function showContextMenu(event, items, getContext) {
-    contextMenu.innerHTML = '';
-    contextMenu.classList.remove('hidden');
-    
-    contextMenu.style.left = `${event.clientX}px`;
-    contextMenu.style.top = `${event.clientY}px`;
-    
-    items.forEach(item => {
-        if (item.separator) {
-            const separator = document.createElement('div');
-            separator.className = 'context-menu-separator';
-            contextMenu.appendChild(separator);
-        } else {
-            const menuItem = document.createElement('div');
-            menuItem.className = 'context-menu-item';
-            menuItem.textContent = item.label;
-            
-            if (item.shortcut) {
-                const shortcut = document.createElement('span');
-                shortcut.className = 'context-menu-shortcut';
-                shortcut.textContent = item.shortcut;
-                menuItem.appendChild(shortcut);
-            }
-            
-            menuItem.addEventListener('click', () => {
-                const context = getContext();
-                const message = {
-                    command: item.command,
-                    ...context
-                };
-                
-                // Добавляем commitHash если он есть в item
-                if (item.commitHash) {
-                    message.commitHash = item.commitHash;
-                }
-                
-                vscode.postMessage(message);
-                hideContextMenu();
-            });
-            
-            contextMenu.appendChild(menuItem);
-        }
-    });
+function getCurrentCommits() {
+  if (!state.currentBranch) {
+    return [];
+  }
+  const commits =
+    state.commitsByBranch && state.commitsByBranch[state.currentBranch];
+  return Array.isArray(commits) ? commits : [];
 }
 
-function hideContextMenu() {
-    contextMenu.classList.add('hidden');
-}
 
-function showDiff(diff, commitHash) {
-    // Можно открыть diff в отдельной панели или встроить в UI
-    console.log('Showing diff for commit:', commitHash);
-}
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+
+
+
 
