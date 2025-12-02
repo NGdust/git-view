@@ -98,7 +98,10 @@ function render() {
     empty.textContent = "Коммиты не найдены.";
     commitsList.appendChild(empty);
   } else {
+    const laneInfo = computeLanes(commits);
+
     commits.forEach((commit, index) => {
+      const lane = laneInfo[commit.hash]?.lane ?? 0;
       const isLast = index === commits.length - 1;
       const isSelected =
         Array.isArray(state.selectedCommits) &&
@@ -118,11 +121,12 @@ function render() {
 
       const dot = document.createElement("div");
       dot.className = "commit-dot";
-      const color = getColorForCommit(commit.hash);
+      const color = getColorForLane(lane);
       dot.style.borderColor = color;
       dot.style.backgroundColor = state.selectedCommits.includes(commit.hash)
         ? color
         : "transparent";
+      dot.style.transform = `translateX(${lane * 10}px)`;
       timeline.appendChild(dot);
 
       const line = document.createElement("div");
@@ -131,6 +135,7 @@ function render() {
         line.classList.add("commit-line--last");
       }
       line.style.backgroundColor = color;
+      line.style.transform = `translateX(${lane * 10}px)`;
       timeline.appendChild(line);
 
       const content = document.createElement("div");
@@ -684,16 +689,64 @@ function getCurrentCommits() {
   return Array.isArray(commits) ? commits : [];
 }
 
-function getColorForCommit(hash) {
-  if (!hash || !laneColors.length) {
-    return "var(--vscode-editor-foreground)";
+function getColorForLane(lane) {
+  if (lane === 0) {
+    // основная линия текущей ветки — оранжевая
+    return "#ffb86c";
   }
-  let acc = 0;
-  for (let i = 0; i < hash.length; i += 1) {
-    acc = (acc * 31 + hash.charCodeAt(i)) >>> 0;
-  }
-  const idx = acc % laneColors.length;
+  const idx = ((lane - 1) % laneColors.length + laneColors.length) % laneColors.length;
   return laneColors[idx];
+}
+
+function computeLanes(commits) {
+  /** @type {Record<string, { lane: number }>} */
+  const info = {};
+  /** @type {(string | null)[]} */
+  const lanes = [];
+
+  const indexByHash = new Map();
+  commits.forEach((c, idx) => indexByHash.set(c.hash, idx));
+
+  commits.forEach((commit) => {
+    const hash = commit.hash;
+    const parents = Array.isArray(commit.parents) ? commit.parents : [];
+
+    let laneIndex = lanes.findIndex((h) => h === hash);
+    if (laneIndex === -1) {
+      laneIndex = lanes.indexOf(null);
+      if (laneIndex === -1) {
+        laneIndex = lanes.length;
+        lanes.push(null);
+      }
+    }
+
+    const clampedLane = laneIndex === 0 ? 0 : 1;
+    info[hash] = { lane: clampedLane };
+
+    lanes[laneIndex] = null;
+
+    if (parents.length > 0) {
+      lanes[laneIndex] = parents[0];
+      for (let i = 1; i < parents.length; i += 1) {
+        const p = parents[i];
+        const existing = lanes.indexOf(p);
+        if (existing === -1) {
+          const free = lanes.indexOf(null);
+          const idx = free === -1 ? lanes.length : free;
+          lanes[idx] = p;
+        }
+      }
+    }
+
+    for (let i = 0; i < lanes.length; i += 1) {
+      const h = lanes[i];
+      if (h != null && !indexByHash.has(h)) {
+        lanes[i] = null;
+      }
+    }
+  });
+
+  return info;
 }
 
 

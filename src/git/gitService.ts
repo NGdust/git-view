@@ -16,6 +16,7 @@ export interface GitCommit {
   date: string;
   subject: string;
   isMerge: boolean;
+  parents: string[];
 }
 
 export class GitService {
@@ -74,7 +75,7 @@ export class GitService {
       "%an", // author name
       "%ai", // author date (ISO, с таймзоной)
       "%s", // subject
-      "%P", // parents
+      "%P", // parents hashes
     ].join("%x1f");
 
     const { stdout } = await execFileAsync(
@@ -99,12 +100,14 @@ export class GitService {
       .map((entry) => entry.trim())
       .filter(Boolean)
       .map((entry) => {
-        const [hash, shortHash, author, date, subject, parents] =
+        const [hash, shortHash, author, date, subject, parentsRaw] =
           entry.split("\x1f");
-        const parentsList = (parents || "").trim();
-        const isMerge =
-          parentsList.length > 0 && parentsList.split(" ").length > 1;
-        return { hash, shortHash, author, date, subject, isMerge };
+        const parentsList = (parentsRaw || "").trim();
+        const parents = parentsList
+          ? parentsList.split(" ").filter((p) => p.length > 0)
+          : [];
+        const isMerge = parents.length > 1;
+        return { hash, shortHash, author, date, subject, isMerge, parents };
       });
   }
 
