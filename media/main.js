@@ -79,8 +79,7 @@ function render() {
 
   branchesColumn.appendChild(branchesList);
 
-  const resizerLeft = document.createElement("div");
-  resizerLeft.className = "column-resizer";
+  const resizerLeft = createLeftResizer();
 
   const commitsColumn = consistsOfDetails()
     ? document.createElement("div")
@@ -823,7 +822,21 @@ function drawCommitConnections(container, rows, laneInfo, commits) {
       path.setAttribute("class", "graph-edge");
       path.setAttribute("stroke", color);
       path.setAttribute("stroke-width", "2");
-      path.setAttribute("d", `M${from.x},${from.y} L${to.x},${to.y}`);
+      // если лейн тот же — рисуем прямую вертикаль/диагональ
+      const parentLane = laneInfo[p]?.lane ?? lane;
+      if (parentLane === lane) {
+        path.setAttribute("d", `M${from.x},${from.y} L${to.x},${to.y}`);
+      } else {
+        // между разными линиями рисуем плавную кривую "ветку"
+        const midY = (from.y + to.y) / 2;
+        const d = [
+          `M${from.x},${from.y}`,
+          `C${from.x},${midY}`,
+          `${to.x},${midY}`,
+          `${to.x},${to.y}`,
+        ].join(" ");
+        path.setAttribute("d", d);
+      }
       svg.appendChild(path);
     });
   });
@@ -908,6 +921,52 @@ function createRightResizer() {
   resizer.onmousedown = (event) => {
     startX = event.clientX;
     startRight = state.layout.right;
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return resizer;
+}
+
+function createLeftResizer() {
+  const resizer = document.createElement("div");
+  resizer.className = "column-resizer";
+
+  let startX = 0;
+  let startLeft = state.layout.left;
+
+  const onMove = (event) => {
+    const dx = event.clientX - startX;
+    const total = window.innerWidth || 1;
+    const delta = dx / total;
+    let nextLeft = startLeft + delta;
+
+    // Ограничения на саму колонку веток
+    nextLeft = Math.min(0.35, Math.max(0.1, nextLeft));
+
+    // Не даём колонке коммитов схлопнуться: минимум 0.3
+    const minCommits = 0.3;
+    const maxLeft = 1 - state.layout.right - minCommits;
+    if (nextLeft > maxLeft) {
+      nextLeft = maxLeft;
+    }
+
+    if (nextLeft < 0.1) {
+      nextLeft = 0.1;
+    }
+
+    state.layout.left = nextLeft;
+    render();
+  };
+
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+
+  resizer.onmousedown = (event) => {
+    startX = event.clientX;
+    startLeft = state.layout.left;
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };

@@ -1,9 +1,14 @@
 {
   "name": "git-plugin-vc",
   "publisher": "NGdust",
-  "displayName": "Git Panel Manager",
-  "description": "Простой UI для управления git текущего проекта в нижней панели VS Code",
+  "displayName": "Git Panel",
+  "description": "Simple UI for managing git of the current project in the bottom panel of VS Code",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NGdust/git-panel"
+  },
+  "homepage": "https://github.com/NGdust/git-panel",
   "engines": {
     "vscode": "^1.74.0"
   },

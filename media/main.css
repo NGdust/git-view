@@ -20,18 +20,15 @@ body {
 }
 
 .column--branches {
-  flex: 0 0 18%;
-  max-width: 28%;
+  flex: 0 0 20%;
 }
 
 .column--commits {
-  flex: 1;
+  flex: 0 0 60%;
 }
 
 .column--details {
-  flex: 0 0 25%;
-  max-width: 40%;
-  border-right: none;
+  flex: 0 0 20%;
 }
 
 .column-header {
