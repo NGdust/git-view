@@ -7,7 +7,9 @@ const root = document.getElementById("root");
 /** @type {{
   branches: string[];
   commitsByBranch: Record<string, any[]>;
-  currentBranch?: string;
+  currentBranch?: string; // для обратной совместимости, фактически selectedBranch
+  headBranch?: string; // реальная текущая ветка в репозитории
+  selectedBranch?: string; // выбранная в UI ветка
   expandedFolders?: Record<string, boolean>;
   selectedCommits?: string[];
 }} */
@@ -15,6 +17,8 @@ let state = {
   branches: [],
   commitsByBranch: {},
   currentBranch: undefined,
+  headBranch: undefined,
+  selectedBranch: undefined,
   expandedFolders: {},
   selectedCommits: [],
 };
@@ -78,10 +82,12 @@ function render() {
   const commitsList = document.createElement("div");
   commitsList.className = "list";
 
+  const activeBranch =
+    state.selectedBranch || state.currentBranch || state.headBranch;
   const commits =
-    (state.currentBranch && state.commitsByBranch[state.currentBranch]) || [];
+    (activeBranch && state.commitsByBranch[activeBranch]) || [];
 
-  if (!state.currentBranch) {
+  if (!activeBranch) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "Выберите ветку, чтобы увидеть коммиты.";
@@ -171,21 +177,24 @@ function createBranchItem(options) {
   }
   item.style.paddingLeft = `${8 + level * 8}px`;
 
-  const isCurrent = fullName === state.currentBranch;
-  if (isCurrent) {
+  const isHead = fullName === state.headBranch;
+  const isSelected =
+    fullName === (state.selectedBranch || state.currentBranch);
+
+  if (isSelected) {
     item.classList.add("selected");
   }
 
   const row = document.createElement("div");
-  row.className = isCurrent ? "current-branch-row" : "";
+  row.className = isHead ? "current-branch-row" : "";
 
   const labelEl = document.createElement("span");
   labelEl.textContent = label;
-  if (isCurrent) {
+  if (isSelected) {
     labelEl.className = "current-branch-label";
   }
 
-  if (isCurrent) {
+  if (isHead) {
     const icon = createCurrentBranchIcon();
     row.appendChild(icon);
   }
@@ -326,13 +335,15 @@ window.addEventListener("message", (event) => {
     case "state":
       // запомним прошлую ветку, чтобы можно было сбросить выделение при смене
       {
-        const prevBranch = state.currentBranch;
+        const prevBranch = state.selectedBranch || state.currentBranch;
         const payload = message.payload || {};
         state = {
           ...state,
           ...payload,
         };
-        if (payload.currentBranch && payload.currentBranch !== prevBranch) {
+        const nextBranch =
+          payload.selectedBranch || payload.currentBranch || payload.headBranch;
+        if (nextBranch && nextBranch !== prevBranch) {
           state.selectedCommits = [];
         }
       }
