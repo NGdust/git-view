@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="media/logo.png" alt="Git Panel Logo" width="160">
   <h1>Git Panel</h1>
   <p>Compact Git UI panel for VS Code and Cursor</p>
 </div>
@@ -8,6 +9,16 @@
 
 Git Panel is a minimal, fast Git UI that lives in the bottom panel of VS Code / Cursor.  
 It shows branches, commits and commit details in a clean 3-column layout and focuses on everyday workflows.
+
+---
+
+## 📸 Screenshot
+
+<div align="center">
+  <img src="media/image.png" alt="Git Panel Screenshot" width="900">
+</div>
+
+---
 
 ## ▶️ Usage
 
@@ -27,6 +38,4 @@ It shows branches, commits and commit details in a clean 3-column layout and foc
 ## 📝 License
 
 This project is licensed under the MIT License – see the [`LICENSE`](LICENSE) file for details.
-
-
 

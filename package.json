@@ -9,6 +9,7 @@
     "url": "https://github.com/NGdust/git-panel"
   },
   "homepage": "https://github.com/NGdust/git-panel",
+  "icon": "media/logo.png",
   "engines": {
     "vscode": "^1.74.0"
   },
