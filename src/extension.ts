@@ -420,8 +420,8 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
       Promise.all(
         branches.map(async (b) => {
           try {
-            const list = await this.git.getUnpulledCommits(b.name);
-            return [b.name, list.length] as const;
+            const count = await this.git.getUnpulledCommits(b.name);
+            return [b.name, count] as const;
           } catch {
             return [b.name, 0] as const;
           }

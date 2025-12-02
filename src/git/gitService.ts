@@ -288,58 +288,34 @@ export class GitService {
     }
   }
 
-  public async getUnpulledCommits(
-    branch: string,
-    maxCount = 50,
-  ): Promise<GitCommit[]> {
+  /**
+   * Количество коммитов, которых нет локально, но есть в upstream‑ветке.
+   *
+   * Если у ветки нет upstream‑а или репозиторий без remotes —
+   * возвращаем 0 (ничего тянуть), чтобы в UI показывался только push‑счётчик.
+   */
+  public async getUnpulledCommits(branch: string): Promise<number> {
     if (!(await this.isGitRepo()) || !this.cwd) {
-      return [];
+      return 0;
     }
-
-    const format = [
-      "%H",
-      "%h",
-      "%an",
-      "%ai",
-      "%s",
-      "%P",
-    ].join("%x1f");
 
     try {
       const upstream = await this.getUpstreamRef(branch);
-
-      // Если tracking‑ветка не настроена, считать, что "тянуть" нечего.
       if (!upstream) {
-        return [];
+        return 0;
       }
 
-      // Коммиты, которые есть в upstream, но отсутствуют в локальной ветке.
       const { stdout } = await execFileAsync(
         "git",
-        ["log", upstream, "--not", branch, `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
+        ["rev-list", "--left-right", "--count", `${branch}...${upstream}`],
         { cwd: this.cwd },
       );
 
-      if (!stdout.trim()) {
-        return [];
-      }
-
-      return stdout
-        .split("\x1e")
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .map((entry) => {
-          const [hash, shortHash, author, date, subject, parentsRaw] =
-            entry.split("\x1f");
-          const parentsList = (parentsRaw || "").trim();
-          const parents = parentsList
-            ? parentsList.split(" ").filter((p) => p.length > 0)
-            : [];
-          const isMerge = parents.length > 1;
-          return { hash, shortHash, author, date, subject, isMerge, parents };
-        });
+      const [behindStr] = stdout.trim().split("\t");
+      const behind = Number(behindStr);
+      return Number.isNaN(behind) ? 0 : behind;
     } catch {
-      return [];
+      return 0;
     }
   }
 
