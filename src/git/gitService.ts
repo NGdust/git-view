@@ -19,6 +19,11 @@ export interface GitCommit {
   parents: string[];
 }
 
+export interface GitCommitDetails {
+  hash: string;
+  files: string[];
+}
+
 export class GitService {
   constructor(private readonly workspaceFolder: vscode.Uri | undefined) {}
 
@@ -201,6 +206,25 @@ export class GitService {
     await execFileAsync("git", ["push", "-u", "origin", branch], {
       cwd: this.cwd,
     });
+  }
+
+  public async getCommitDetails(hash: string): Promise<GitCommitDetails> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return { hash, files: [] };
+    }
+
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", "--name-only", "--pretty=format:", hash],
+      { cwd: this.cwd },
+    );
+
+    const files = stdout
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    return { hash, files };
   }
 }
 

@@ -12,6 +12,7 @@ const root = document.getElementById("root");
   selectedBranch?: string; // выбранная в UI ветка
   expandedFolders?: Record<string, boolean>;
   selectedCommits?: string[];
+  expandedDetails?: Record<string, boolean>;
 }} */
 let state = {
   branches: [],
@@ -21,6 +22,12 @@ let state = {
   selectedBranch: undefined,
   expandedFolders: {},
   selectedCommits: [],
+  commitDetails: null,
+  layout: {
+    left: 0.25,
+    right: 0.25,
+  },
+  expandedDetails: {},
 };
 
 function render() {
@@ -33,7 +40,8 @@ function render() {
   container.style.height = "100%";
 
   const branchesColumn = document.createElement("div");
-  branchesColumn.className = "column";
+  branchesColumn.className = "column column--branches";
+  branchesColumn.style.flexBasis = `${state.layout.left * 100}%`;
 
   const branchesHeader = document.createElement("div");
   branchesHeader.className = "column-header";
@@ -71,8 +79,13 @@ function render() {
 
   branchesColumn.appendChild(branchesList);
 
-  const commitsColumn = document.createElement("div");
-  commitsColumn.className = "column";
+  const resizerLeft = document.createElement("div");
+  resizerLeft.className = "column-resizer";
+
+  const commitsColumn = consistsOfDetails()
+    ? document.createElement("div")
+    : document.createElement("div");
+  commitsColumn.className = "column column--commits";
 
   const commitsHeader = document.createElement("div");
   commitsHeader.className = "column-header";
@@ -99,6 +112,8 @@ function render() {
     commitsList.appendChild(empty);
   } else {
     const laneInfo = computeLanes(commits);
+    /** @type {{ hash: string; lane: number; item: HTMLDivElement }[]} */
+    const commitRows = [];
 
     commits.forEach((commit, index) => {
       const lane = laneInfo[commit.hash]?.lane ?? 0;
@@ -109,6 +124,7 @@ function render() {
 
       const item = document.createElement("div");
       item.className = "item commit-row";
+      item.dataset.hash = commit.hash;
       if (isSelected) {
         item.classList.add("commit-selected");
       }
@@ -170,13 +186,25 @@ function render() {
       };
 
       commitsList.appendChild(item);
+
+      commitRows.push({ hash: commit.hash, lane, item });
     });
+
+    drawCommitConnections(commitsList, commitRows, laneInfo, commits);
   }
 
   commitsColumn.appendChild(commitsList);
 
+  const detailsColumn = document.createElement("div");
+  detailsColumn.className = "column column--details";
+  detailsColumn.style.flexBasis = `${state.layout.right * 100}%`;
+  renderDetailsColumn(detailsColumn);
+
   container.appendChild(branchesColumn);
+  container.appendChild(resizerLeft);
   container.appendChild(commitsColumn);
+  container.appendChild(createRightResizer());
+  container.appendChild(detailsColumn);
 
   root.appendChild(container);
 }
@@ -361,6 +389,10 @@ window.addEventListener("message", (event) => {
           state.selectedCommits = [];
         }
       }
+      render();
+      break;
+    case "commitDetails":
+      state.commitDetails = message.payload;
       render();
       break;
     default:
@@ -573,6 +605,7 @@ function handleCommitClick(hash, event) {
   }
 
   lastSelectedCommitHash = hash;
+  vscode.postMessage({ type: "requestCommitDetails", hash });
   render();
 }
 
@@ -747,6 +780,217 @@ function computeLanes(commits) {
   });
 
   return info;
+}
+
+function drawCommitConnections(container, rows, laneInfo, commits) {
+  const ns = "http://www.w3.org/2000/svg";
+  const existing = container.querySelector(".graph-overlay");
+  if (existing) {
+    existing.remove();
+  }
+
+  const svg = document.createElementNS(ns, "svg");
+  svg.classList.add("graph-overlay");
+  const bounds = container.getBoundingClientRect();
+  svg.setAttribute("width", String(bounds.width));
+  svg.setAttribute("height", String(bounds.height));
+  svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+
+  const rect = container.getBoundingClientRect();
+  /** @type {Map<string, { x: number; y: number }>} */
+  const points = new Map();
+
+  rows.forEach((row) => {
+    const dot = row.item.querySelector(".commit-dot");
+    if (!dot) return;
+    const r = dot.getBoundingClientRect();
+    const x = r.left - rect.left + r.width / 2;
+    const y = r.top - rect.top + r.height / 2;
+    points.set(row.hash, { x, y });
+  });
+
+  commits.forEach((commit) => {
+    const from = points.get(commit.hash);
+    if (!from) return;
+    const lane = laneInfo[commit.hash]?.lane ?? 0;
+    const color = getColorForLane(lane);
+
+    const parents = Array.isArray(commit.parents) ? commit.parents : [];
+    parents.forEach((p) => {
+      const to = points.get(p);
+      if (!to) return;
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("class", "graph-edge");
+      path.setAttribute("stroke", color);
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("d", `M${from.x},${from.y} L${to.x},${to.y}`);
+      svg.appendChild(path);
+    });
+  });
+
+  container.appendChild(svg);
+}
+
+function renderDetailsColumn(column) {
+  const header = document.createElement("div");
+  header.className = "column-header";
+  header.textContent = "Details";
+  column.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "list details-list";
+
+  const details = state.commitDetails;
+  if (!details || !details.commit) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Select a commit to see details";
+    body.appendChild(empty);
+  } else {
+    const { commit, files } = details;
+
+    const filesContainer = document.createElement("div");
+    filesContainer.className = "details-files";
+
+    if (files && files.length) {
+      if (!state.expandedDetails) {
+        state.expandedDetails = {};
+      }
+      const tree = buildFileTree(files);
+      renderFileTree(tree, filesContainer, 0);
+    }
+
+    body.appendChild(filesContainer);
+
+    const metaBox = document.createElement("div");
+    metaBox.className = "details-meta";
+
+    const title = document.createElement("div");
+    title.className = "details-meta-title";
+    title.textContent = commit.subject;
+    metaBox.appendChild(title);
+
+    const metaLine = document.createElement("div");
+    metaLine.className = "details-meta-line";
+    metaLine.textContent = `${commit.hash.slice(0, 7)} · ${commit.author} · ${
+      commit.date
+    }`;
+    metaBox.appendChild(metaLine);
+
+    body.appendChild(metaBox);
+  }
+
+  column.appendChild(body);
+}
+
+function createRightResizer() {
+  const resizer = document.createElement("div");
+  resizer.className = "column-resizer";
+
+  let startX = 0;
+  let startRight = state.layout.right;
+
+  const onMove = (event) => {
+    const dx = event.clientX - startX;
+    const total = window.innerWidth || 1;
+    const delta = dx / total;
+    let nextRight = startRight - delta;
+    nextRight = Math.min(0.45, Math.max(0.15, nextRight));
+    state.layout.right = nextRight;
+    render();
+  };
+
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+
+  resizer.onmousedown = (event) => {
+    startX = event.clientX;
+    startRight = state.layout.right;
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return resizer;
+}
+
+function consistsOfDetails() {
+  return true;
+}
+
+function buildFileTree(files) {
+  const root = { name: "", path: "", children: new Map(), files: [] };
+
+  files.forEach((path) => {
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 0) {
+      return;
+    }
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const part = parts[i];
+      let child = node.children.get(part);
+      if (!child) {
+        const childPath = node.path ? `${node.path}/${part}` : part;
+        child = { name: part, path: childPath, children: new Map(), files: [] };
+        node.children.set(part, child);
+      }
+      node = child;
+    }
+    node.files.push(parts[parts.length - 1]);
+  });
+
+  return root;
+}
+
+function renderFileTree(node, container, level) {
+  const indent = 8 + level * 12;
+
+  node.children.forEach((child, name) => {
+    const id = child.path || name;
+    const expanded =
+      !state.expandedDetails || state.expandedDetails[id] !== false;
+
+    const row = document.createElement("div");
+    row.className = "details-folder";
+    row.style.paddingLeft = `${indent}px`;
+
+    const arrow = document.createElement("span");
+    arrow.className = "folder-arrow";
+    arrow.textContent = expanded ? "▾" : "▸";
+    row.appendChild(arrow);
+
+    const icon = createFolderIcon();
+    row.appendChild(icon);
+
+    const label = document.createElement("span");
+    label.className = "details-folder-name";
+    label.textContent = name;
+    row.appendChild(label);
+
+    container.appendChild(row);
+
+    row.onclick = () => {
+      if (!state.expandedDetails) {
+        state.expandedDetails = {};
+      }
+      state.expandedDetails[id] = !expanded;
+      render();
+    };
+
+    if (expanded) {
+      renderFileTree(child, container, level + 1);
+    }
+  });
+
+  node.files.forEach((file) => {
+    const row = document.createElement("div");
+    row.className = "details-file";
+    row.style.paddingLeft = `${indent + 12}px`;
+    row.textContent = file;
+    container.appendChild(row);
+  });
 }
 
 

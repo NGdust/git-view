@@ -63,6 +63,9 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         case "commitAction":
           await this.handleCommitAction(message.action, message.commits);
           break;
+        case "requestCommitDetails":
+          await this.sendCommitDetails(message.hash);
+          break;
         default:
           break;
       }
@@ -276,6 +279,27 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
       // в списке коммиты идут от нового к старому, нам нужно от старого к новому
       return ib - ia;
     });
+  }
+
+  private async sendCommitDetails(hash: string): Promise<void> {
+    if (!this._view) {
+      return;
+    }
+    try {
+      const details = await this.git.getCommitDetails(hash);
+      const commit = this._lastCommits.find((c) => c.hash === hash) ?? null;
+      this._view.webview.postMessage({
+        type: "commitDetails",
+        payload: {
+          hash,
+          commit,
+          files: details.files,
+        },
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to load commit details", error);
+    }
   }
 
   private async pushState(): Promise<void> {
