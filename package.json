@@ -1,141 +1,77 @@
 {
   "name": "git-plugin-vc",
-  "displayName": "Git Plugin (JetBrains Style)",
-  "description": "Git клиент для VS Code в стиле JetBrains IDE",
+  "publisher": "NGdust",
+  "displayName": "Git Panel",
+  "description": "Simple UI for managing git of the current project in the bottom panel of VS Code",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NGdust/git-panel"
+  },
+  "homepage": "https://github.com/NGdust/git-panel",
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
+    "SCM",
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:gitPlugin.openView",
-    "onView:gitPlugin.gitPluginView"
+    "onView:gitPanelView",
+    "onCommand:gitPanel.refresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
       "panel": [
         {
-          "id": "gitPlugin",
-          "title": "Git Plugin",
-          "icon": "$(git-branch)"
+          "id": "gitPanel",
+          "title": "Git Panel",
+          "icon": "media/git-panel.svg"
         }
       ]
     },
     "views": {
-      "gitPlugin": [
+      "gitPanel": [
         {
-          "id": "gitPluginView",
-          "name": "Git Log"
+          "id": "gitPanelView",
+          "name": "Git Panel",
+          "type": "webview"
         }
       ]
     },
     "commands": [
       {
-        "command": "gitPlugin.openView",
-        "title": "Open Git Log",
-        "icon": "$(git-branch)"
-      },
-      {
-        "command": "gitPlugin.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "gitPlugin.checkout",
-        "title": "Checkout"
-      },
-      {
-        "command": "gitPlugin.createBranch",
-        "title": "New Branch from..."
-      },
-      {
-        "command": "gitPlugin.compare",
-        "title": "Compare with..."
-      },
-      {
-        "command": "gitPlugin.showDiff",
-        "title": "Show Diff with Working Tree"
-      },
-      {
-        "command": "gitPlugin.rebase",
-        "title": "Rebase..."
-      },
-      {
-        "command": "gitPlugin.merge",
-        "title": "Merge..."
-      },
-      {
-        "command": "gitPlugin.push",
-        "title": "Push..."
-      },
-      {
-        "command": "gitPlugin.pull",
-        "title": "Update"
-      },
-      {
-        "command": "gitPlugin.rename",
-        "title": "Rename..."
-      },
-      {
-        "command": "gitPlugin.delete",
-        "title": "Delete"
-      },
-      {
-        "command": "gitPlugin.cherryPick",
-        "title": "Cherry-Pick"
-      },
-      {
-        "command": "gitPlugin.revert",
-        "title": "Revert Commit"
-      },
-      {
-        "command": "gitPlugin.reset",
-        "title": "Reset Current Branch to Here..."
-      },
-      {
-        "command": "gitPlugin.copyRevision",
-        "title": "Copy Revision Number"
+        "command": "gitPanel.refresh",
+        "title": "Git Panel: Обновить данные"
       }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "gitPlugin.refresh",
-          "when": "view == gitPluginView",
-          "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "gitPlugin.checkout",
-          "when": "view == gitPluginView && viewItem == branch",
-          "group": "inline"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "lint": "eslint src --ext .ts",
+    "prepare": "npx simple-git-hooks",
+    "package": "vsce package",
+    "dev:install": "npm run build && npx vsce package --allow-missing-repository && (command -v cursor >/dev/null 2>&1 && cursor --install-extension $(ls -t *.vsix | head -n 1) || command -v code >/dev/null 2>&1 && code --install-extension $(ls -t *.vsix | head -n 1))",
+    "test": "echo \"No tests yet\""
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/node": "^22.7.0",
     "@types/vscode": "^1.74.0",
-    "@typescript-eslint/eslint-plugin": "^5.45.0",
-    "@typescript-eslint/parser": "^5.45.0",
-    "eslint": "^8.28.0",
-    "typescript": "^4.9.4"
-  },
-  "dependencies": {
-    "simple-git": "^3.19.1"
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@typescript-eslint/parser": "^8.10.0",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^9.12.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "prettier": "^3.3.3",
+    "simple-git-hooks": "^2.11.1",
+    "typescript": "^5.6.3"
   }
 }
+
+
+
 

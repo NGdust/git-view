@@ -1,103 +1,89 @@
-# Git Plugin для VS Code (в стиле JetBrains)
+<div align="center">
+  <h1>Git Panel</h1>
+  <p>Compact Git UI panel for VS Code and Cursor</p>
+</div>
 
-Расширение для VS Code, предоставляющее Git-клиент с интерфейсом, похожим на JetBrains IDE.
+![VS Code](https://img.shields.io/badge/VS%20Code-1.74.0+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## Возможности
+Git Panel is a minimal, fast Git UI that lives in the bottom panel of VS Code / Cursor.  
+It shows branches, commits and commit details in a clean 3-column layout and focuses on everyday workflows.
 
-- 📊 **Визуализация истории коммитов** с графом веток
-- 🌿 **Управление ветками** (локальные и удаленные)
-- 🔍 **Поиск и фильтрация** коммитов
-- 🎯 **Контекстные меню** для веток и коммитов
-- 🔄 **Git операции**: checkout, merge, rebase, cherry-pick, revert и др.
-- 🏷️ **Управление тегами**
-- 🎨 **Темная тема** в стиле VS Code
+---
 
-## Установка
+## ✨ Features
 
-### Автоматическая установка (рекомендуется)
+- **Branches column**
+  - Local branches grouped by folders (split by `/`)
+  - Expandable folders with small folder icons
+  - Current `HEAD` branch marked with a yellow circle
+  - Context menu (right click): `Checkout`, `New branch`, `Delete`, `Pull`, `Push`
 
-Просто запустите скрипт установки:
+- **Commits column**
+  - Compact commit list for the selected branch
+  - Colored graph with main and secondary lanes, merge links and branch “offsprings”
+  - Single and multi-selection (Ctrl/Cmd click, Shift range selection)
+  - Commit context menu:
+    - `Squash Commits…`
+    - `Reset current branch to here`
+    - `Change text`
+    - `Cherry-Pick`
 
-```bash
-./install.sh
-```
+- **Details column**
+  - Hierarchical file tree for the selected commit (relative to repository root)
+  - Collapsible folders with icons
+  - Files in blue, clickable:
+    - Left click — open diff for the file in a separate editor tab
+    - Right click — `Edit Source` (opens file in editor)
+  - Pinned block at the bottom with commit message, hash, author and date
 
-Скрипт автоматически:
-- Проверит наличие Node.js и npm
-- Установит зависимости
-- Скомпилирует TypeScript код
-- Установит расширение в VS Code или Cursor
-- Предоставит инструкции по использованию
+- **Panel layout**
+  - 3 resizable columns: Branches – Commits – Details
+  - Column widths can be adjusted with mouse drag on vertical splitters
 
-### Ручная установка
+---
 
-1. Клонируйте репозиторий
-2. Установите зависимости:
-```bash
-npm install
-```
-3. Скомпилируйте проект:
-```bash
-npm run compile
-```
-4. Откройте проект в VS Code и нажмите F5 для запуска в режиме разработки
+## 🚀 Installation
 
-## Использование
+### From VSIX (recommended for this repo)
 
-После установки расширения:
+1. Build the extension (from project root):
 
-1. Перезапустите VS Code/Cursor
-2. Откройте Git-репозиторий
-3. Найдите вкладку "Git Log" в нижней панели (где терминал, проблемы, вывод)
-4. Или нажмите Cmd+Shift+P (или Ctrl+Shift+P) и введите "Git Plugin: Open View"
-5. Используйте правый клик на ветках для доступа к контекстному меню
-6. Используйте правый клик на коммитах для выполнения операций с коммитами
-7. Используйте поисковую строку для фильтрации коммитов
+   ```bash
+   npm install
+   npm run build
+   npx vsce package
+   ```
 
-## Команды
+   This produces a file like `git-plugin-vc-0.0.1.vsix`.
 
-- `gitPlugin.openView` - Открыть Git Log
-- `gitPlugin.refresh` - Обновить данные
-- `gitPlugin.checkout` - Переключиться на ветку
-- `gitPlugin.createBranch` - Создать новую ветку
-- `gitPlugin.compare` - Сравнить ветки
-- `gitPlugin.rebase` - Выполнить rebase
-- `gitPlugin.merge` - Выполнить merge
-- И другие...
+2. In VS Code / Cursor:
+   - Open **Extensions**
+   - Click `…` → `Install from VSIX…`
+   - Select the generated `.vsix` file
 
-## Структура проекта
+3. Reload the editor.
 
-```
-git-plugin-vc/
-├── src/
-│   ├── extension.ts          # Точка входа расширения
-│   ├── git/
-│   │   └── gitService.ts     # Сервис для работы с Git
-│   └── webview/
-│       └── gitViewProvider.ts # Провайдер WebView
-├── media/
-│   ├── main.css              # Стили интерфейса
-│   └── main.js               # Логика WebView
-├── package.json              # Конфигурация расширения
-└── tsconfig.json             # Конфигурация TypeScript
-```
+---
 
-## Разработка
+## ▶️ Usage
 
-Для разработки используйте:
+1. Open a Git repository folder in VS Code / Cursor.
+2. Open the **Git Panel** view in the bottom panel.
+3. In the left column:
+   - Choose a branch; commits for that branch appear in the middle column.
+4. In the commits column:
+   - Click a commit to see file changes and metadata in the right column.
+   - Use right click on commits for actions like squash, reset, cherry-pick.
+5. In the details column:
+   - Click files to open diffs.
+   - Right-click a file → **Edit Source** to open it directly.
 
-```bash
-# Компиляция
-npm run compile
+---
 
-# Режим наблюдения
-npm run watch
+## 📝 License
 
-# Линтинг
-npm run lint
-```
+This project is licensed under the MIT License – see the [`LICENSE`](LICENSE) file for details.
 
-## Лицензия
 
-MIT
 
