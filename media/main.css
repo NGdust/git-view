@@ -182,7 +182,7 @@ body {
 .current-branch-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .current-branch-label {
@@ -195,6 +195,12 @@ body {
   fill: #e0c06f;
   stroke: #e0c06f;
   stroke-width: 1;
+}
+
+.branch-unpushed {
+  font-size: 11px;
+  color: #50fa7b;
+  margin-left: 6px;
 }
 
 .commit-selected {

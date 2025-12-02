@@ -406,14 +406,27 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
     this._currentBranch = selectedBranch;
     this._lastCommits = commits;
 
+    const unpushedEntries = await Promise.all(
+      branches.map(async (b) => {
+        try {
+          const list = await this.git.getUnpushedCommits(b.name);
+          return [b.name, list.length] as const;
+        } catch {
+          return [b.name, 0] as const;
+        }
+      }),
+    );
+    const unpushedCounts = Object.fromEntries(unpushedEntries);
+
     this._view.webview.postMessage({
       type: "state",
       payload: {
         branches: branches.map((b) => b.name),
-          commitsByBranch: selectedBranch ? { [selectedBranch]: commits } : {},
-          currentBranch: selectedBranch,
-          headBranch,
-          selectedBranch,
+        commitsByBranch: selectedBranch ? { [selectedBranch]: commits } : {},
+        currentBranch: selectedBranch,
+        headBranch,
+        selectedBranch,
+        unpushedCounts,
       },
     });
   }
