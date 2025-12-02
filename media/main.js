@@ -1051,29 +1051,74 @@ function renderFileTree(node, container, level) {
 
     const fullPath = node.path ? `${node.path}/${file}` : file;
 
-    row.onclick = (event) => {
-      event.stopPropagation();
-      const details = state.commitDetails;
-      if (details && details.commit) {
-        vscode.postMessage({
-          type: "openDiff",
-          hash: details.commit.hash,
-          file: fullPath,
-        });
-      }
-    };
-
     row.oncontextmenu = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      vscode.postMessage({
-        type: "openFileSource",
-        file: fullPath,
-      });
+      openDetailsFileContextMenu(event.clientX, event.clientY, fullPath);
     };
 
     container.appendChild(row);
   });
+}
+
+function openDetailsFileContextMenu(x, y, fullPath) {
+  const details = state.commitDetails;
+  if (!details || !details.commit) {
+    return;
+  }
+
+  closeContextMenu();
+
+  const menu = document.createElement("div");
+  menu.className = "context-menu";
+
+  const diffItem = document.createElement("div");
+  diffItem.className = "context-menu-item";
+  diffItem.textContent = "Diff";
+  diffItem.onclick = () => {
+    vscode.postMessage({
+      type: "openDiff",
+      hash: details.commit.hash,
+      file: fullPath,
+    });
+    closeContextMenu();
+  };
+
+  const editItem = document.createElement("div");
+  editItem.className = "context-menu-item";
+  editItem.textContent = "Edit Source";
+  editItem.onclick = () => {
+    vscode.postMessage({
+      type: "openFileSource",
+      file: fullPath,
+    });
+    closeContextMenu();
+  };
+
+  menu.appendChild(diffItem);
+  menu.appendChild(editItem);
+
+  document.body.appendChild(menu);
+  currentContextMenu = menu;
+
+  const rect = menu.getBoundingClientRect();
+  let left = x;
+  let top = y;
+  const maxX = window.innerWidth - rect.width - 4;
+  const maxY = window.innerHeight - rect.height - 4;
+  if (left > maxX) left = maxX;
+  if (top > maxY) top = maxY;
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onAnyClick = (event) => {
+    if (!menu.contains(event.target)) {
+      closeContextMenu();
+    }
+  };
+
+  window.addEventListener("mousedown", onAnyClick, { once: true });
 }
 
 
