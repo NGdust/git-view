@@ -197,15 +197,74 @@ export class GitService {
     await execFileAsync("git", ["pull"], { cwd: this.cwd });
   }
 
-  public async pushBranch(branch: string): Promise<void> {
+  public async pushBranch(branch: string, force = false): Promise<void> {
     if (!(await this.isGitRepo()) || !this.cwd) {
       return;
     }
 
+    const args = force
+      ? ["push", "--force-with-lease", "-u", "origin", branch]
+      : ["push", "-u", "origin", branch];
+
     // Пытаемся отправить ветку на origin, создавая tracking при необходимости
-    await execFileAsync("git", ["push", "-u", "origin", branch], {
+    await execFileAsync("git", args, {
       cwd: this.cwd,
     });
+  }
+
+  public async getUnpushedCommits(
+    branch: string,
+    maxCount = 50,
+  ): Promise<GitCommit[]> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return [];
+    }
+
+    const format = [
+      "%H", // hash
+      "%h", // short hash
+      "%an", // author name
+      "%ai", // author date
+      "%s", // subject
+      "%P", // parents
+    ].join("%x1f");
+
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        [
+          "log",
+          branch,
+          "--not",
+          "--remotes",
+          `--max-count=${maxCount}`,
+          `--pretty=format:${format}%x1e`,
+        ],
+        { cwd: this.cwd },
+      );
+
+      if (!stdout.trim()) {
+        return [];
+      }
+
+      return stdout
+        .split("\x1e")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const [hash, shortHash, author, date, subject, parentsRaw] =
+            entry.split("\x1f");
+          const parentsList = (parentsRaw || "").trim();
+          const parents = parentsList
+            ? parentsList.split(" ").filter((p) => p.length > 0)
+            : [];
+          const isMerge = parents.length > 1;
+          return { hash, shortHash, author, date, subject, isMerge, parents };
+        });
+    } catch {
+      // если произошла ошибка, считаем, что непушенных коммитов нет
+      return [];
+    }
   }
 
   public async getCommitDetails(hash: string): Promise<GitCommitDetails> {

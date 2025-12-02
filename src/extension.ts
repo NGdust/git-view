@@ -106,8 +106,7 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
           await this.pushState();
           break;
         case "push":
-          await this.git.pushBranch(branch);
-          await this.pushState();
+          await this.confirmAndPush(branch);
           break;
         case "newBranch": {
           const newName = await vscode.window.showInputBox({
@@ -162,6 +161,40 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         `Git Panel: не удалось выполнить действие с веткой (${message})`,
       );
     }
+  }
+  private async confirmAndPush(branch: string): Promise<void> {
+    const commits = await this.git.getUnpushedCommits(branch);
+
+    const list =
+      commits.length === 0
+        ? "No local commits ahead of upstream."
+        : commits
+            .map((c) => c.subject)
+            .slice(0, 20)
+            .join("\n");
+
+    const detail =
+      commits.length === 0
+        ? list
+        : `${commits.length} сommits to push:\n${list}`;
+
+    const choice = await vscode.window.showInformationMessage(
+      `Push branch "${branch}"?`,
+      {
+        modal: true,
+        detail,
+      },
+      "Push",
+      "Push Force",
+    );
+
+    if (!choice) {
+      return;
+    }
+
+    const force = choice === "Push Force";
+    await this.git.pushBranch(branch, force);
+    await this.pushState();
   }
 
   private async handleCommitAction(
