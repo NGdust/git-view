@@ -31,6 +31,29 @@ export class GitService {
     return this.workspaceFolder?.fsPath;
   }
 
+  /**
+   * Возвращает upstream‑ветку для локальной ветки (например, origin/main),
+   * либо null, если tracking не настроен.
+   */
+  private async getUpstreamRef(branch: string): Promise<string | null> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return null;
+    }
+
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", `${branch}@{upstream}`],
+        { cwd: this.cwd },
+      );
+
+      const ref = stdout.trim();
+      return ref.length > 0 ? ref : null;
+    } catch {
+      return null;
+    }
+  }
+
   public async isGitRepo(): Promise<boolean> {
     if (!this.cwd) {
       return false;
@@ -230,11 +253,16 @@ export class GitService {
     ].join("%x1f");
 
     try {
-      const { stdout } = await execFileAsync(
-        "git",
-        ["log", branch, "--not", "--remotes", `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
-        { cwd: this.cwd },
-      );
+      // Если для ветки есть upstream, считаем коммиты "вперёд" только относительно него.
+      // Если upstream нет, используем все remote‑ветки как раньше.
+      const upstream = await this.getUpstreamRef(branch);
+
+      const args =
+        upstream != null
+          ? ["log", branch, "--not", upstream, `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`]
+          : ["log", branch, "--not", "--remotes", `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`];
+
+      const { stdout } = await execFileAsync("git", args, { cwd: this.cwd });
 
       if (!stdout.trim()) {
         return [];
@@ -278,9 +306,17 @@ export class GitService {
     ].join("%x1f");
 
     try {
+      const upstream = await this.getUpstreamRef(branch);
+
+      // Если tracking‑ветка не настроена, считать, что "тянуть" нечего.
+      if (!upstream) {
+        return [];
+      }
+
+      // Коммиты, которые есть в upstream, но отсутствуют в локальной ветке.
       const { stdout } = await execFileAsync(
         "git",
-        ["log", "--remotes", "--not", branch, `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
+        ["log", upstream, "--not", branch, `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
         { cwd: this.cwd },
       );
 

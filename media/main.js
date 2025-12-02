@@ -306,7 +306,12 @@ function buildBranchTree(branchNames) {
   others.forEach((fullName) => {
     const parts = fullName.split("/");
     if (parts.length === 1) {
-      root.branches.push({ fullName, label: fullName });
+      root.branches.push({
+        fullName,
+        label: fullName,
+        unpushed:
+          (state.unpushedCounts && state.unpushedCounts[fullName]) || 0,
+      });
       return;
     }
 
@@ -324,7 +329,12 @@ function buildBranchTree(branchNames) {
       node = child;
     }
 
-    node.branches.push({ fullName, label: leafLabel });
+    node.branches.push({
+      fullName,
+      label: leafLabel,
+      unpushed:
+        (state.unpushedCounts && state.unpushedCounts[fullName]) || 0,
+    });
   });
 
   function sortNode(node) {
@@ -350,6 +360,7 @@ function renderBranchTree(node, container, level) {
       label: branch.label,
       level,
       isMain: false,
+      unpushed: branch.unpushed || 0,
     });
     container.appendChild(item);
   });
