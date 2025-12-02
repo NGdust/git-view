@@ -406,17 +406,30 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
     this._currentBranch = selectedBranch;
     this._lastCommits = commits;
 
-    const unpushedEntries = await Promise.all(
-      branches.map(async (b) => {
-        try {
-          const list = await this.git.getUnpushedCommits(b.name);
-          return [b.name, list.length] as const;
-        } catch {
-          return [b.name, 0] as const;
-        }
-      }),
-    );
+    const [unpushedEntries, unpulledEntries] = await Promise.all([
+      Promise.all(
+        branches.map(async (b) => {
+          try {
+            const list = await this.git.getUnpushedCommits(b.name);
+            return [b.name, list.length] as const;
+          } catch {
+            return [b.name, 0] as const;
+          }
+        }),
+      ),
+      Promise.all(
+        branches.map(async (b) => {
+          try {
+            const list = await this.git.getUnpulledCommits(b.name);
+            return [b.name, list.length] as const;
+          } catch {
+            return [b.name, 0] as const;
+          }
+        }),
+      ),
+    ]);
     const unpushedCounts = Object.fromEntries(unpushedEntries);
+    const unpulledCounts = Object.fromEntries(unpulledEntries);
 
     this._view.webview.postMessage({
       type: "state",
@@ -427,6 +440,7 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         headBranch,
         selectedBranch,
         unpushedCounts,
+        unpulledCounts,
       },
     });
   }

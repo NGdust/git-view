@@ -232,14 +232,7 @@ export class GitService {
     try {
       const { stdout } = await execFileAsync(
         "git",
-        [
-          "log",
-          branch,
-          "--not",
-          "--remotes",
-          `--max-count=${maxCount}`,
-          `--pretty=format:${format}%x1e`,
-        ],
+        ["log", branch, "--not", "--remotes", `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
         { cwd: this.cwd },
       );
 
@@ -263,6 +256,53 @@ export class GitService {
         });
     } catch {
       // если произошла ошибка, считаем, что непушенных коммитов нет
+      return [];
+    }
+  }
+
+  public async getUnpulledCommits(
+    branch: string,
+    maxCount = 50,
+  ): Promise<GitCommit[]> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return [];
+    }
+
+    const format = [
+      "%H",
+      "%h",
+      "%an",
+      "%ai",
+      "%s",
+      "%P",
+    ].join("%x1f");
+
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        ["log", "--remotes", "--not", branch, `--max-count=${maxCount}`, `--pretty=format:${format}%x1e`],
+        { cwd: this.cwd },
+      );
+
+      if (!stdout.trim()) {
+        return [];
+      }
+
+      return stdout
+        .split("\x1e")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const [hash, shortHash, author, date, subject, parentsRaw] =
+            entry.split("\x1f");
+          const parentsList = (parentsRaw || "").trim();
+          const parents = parentsList
+            ? parentsList.split(" ").filter((p) => p.length > 0)
+            : [];
+          const isMerge = parents.length > 1;
+          return { hash, shortHash, author, date, subject, isMerge, parents };
+        });
+    } catch {
       return [];
     }
   }

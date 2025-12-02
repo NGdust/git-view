@@ -11,6 +11,7 @@ const root = document.getElementById("root");
   headBranch?: string; // реальная текущая ветка в репозитории
   selectedBranch?: string; // выбранная в UI ветка
   unpushedCounts?: Record<string, number>;
+  unpulledCounts?: Record<string, number>;
   expandedFolders?: Record<string, boolean>;
   selectedCommits?: string[];
   expandedDetails?: Record<string, boolean>;
@@ -22,6 +23,7 @@ let state = {
   headBranch: undefined,
   selectedBranch: undefined,
   unpushedCounts: {},
+  unpulledCounts: {},
   expandedFolders: {},
   selectedCommits: [],
   commitDetails: null,
@@ -233,23 +235,33 @@ function createBranchItem(options) {
   const row = document.createElement("div");
   row.className = isHead ? "current-branch-row" : "";
 
+  if (isHead) {
+    const icon = createCurrentBranchIcon();
+    row.appendChild(icon);
+  }
+
   const labelEl = document.createElement("span");
   labelEl.textContent = label;
   if (isSelected) {
     labelEl.className = "current-branch-label";
   }
 
-  if (isHead) {
-    const icon = createCurrentBranchIcon();
-    row.appendChild(icon);
-  }
-
   row.appendChild(labelEl);
+
+  const unpulled =
+    (state.unpulledCounts && state.unpulledCounts[fullName]) || 0;
+
+  if (unpulled > 0) {
+    const remote = document.createElement("span");
+    remote.className = "branch-remote";
+    remote.textContent = `↓ ${unpulled}`;
+    row.appendChild(remote);
+  }
 
   if (unpushed > 0) {
     const counter = document.createElement("span");
     counter.className = "branch-unpushed";
-    counter.textContent = `↑${unpushed}`;
+    counter.textContent = `↑ ${unpushed}`;
     row.appendChild(counter);
   }
 
