@@ -9,6 +9,7 @@ export interface GitBranch {
   current: boolean;
 }
 
+
 export interface GitCommit {
   hash: string;
   shortHash: string;
