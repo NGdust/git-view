@@ -161,6 +161,19 @@ export class GitService {
     });
   }
 
+  public async renameBranch(
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return;
+    }
+
+    await execFileAsync("git", ["branch", "-m", oldName, newName], {
+      cwd: this.cwd,
+    });
+  }
+
   public async deleteBranch(branch: string): Promise<void> {
     if (!(await this.isGitRepo()) || !this.cwd) {
       return;

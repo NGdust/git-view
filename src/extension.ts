@@ -108,6 +108,35 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         case "push":
           await this.confirmAndPush(branch);
           break;
+        case "rename": {
+          const newName = await vscode.window.showInputBox({
+            title: "Rename branch",
+            prompt: `Новое имя для ветки "${branch}"`,
+            value: branch,
+            ignoreFocusOut: true,
+            validateInput: (value) => {
+              if (!value.trim()) {
+                return "Имя ветки не может быть пустым";
+              }
+              if (value.trim() === branch) {
+                return "Новое имя должно отличаться от текущего";
+              }
+              return null;
+            },
+          });
+
+          if (!newName) {
+            return;
+          }
+
+          const trimmed = newName.trim();
+          await this.git.renameBranch(branch, trimmed);
+          if (this._currentBranch === branch) {
+            this._currentBranch = trimmed;
+          }
+          await this.pushState();
+          break;
+        }
         case "newBranch": {
           const newName = await vscode.window.showInputBox({
             title: "New branch",
@@ -157,9 +186,26 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         error instanceof Error ? error.message : "Неизвестная ошибка git";
       // eslint-disable-next-line no-console
       console.error("Git branch action failed", error);
-      void vscode.window.showErrorMessage(
-        `Git Panel: не удалось выполнить действие с веткой (${message})`,
-      );
+      if (action === "checkout") {
+        let friendly = `Не удалось переключиться на ветку "${branch}".`;
+
+        const lower = message.toLowerCase();
+        if (
+          lower.includes("would be overwritten by checkout") ||
+          lower.includes("please commit your changes or stash them before you switch branches")
+        ) {
+          friendly =
+            `Нельзя переключиться на ветку "${branch}": ` +
+            "есть незакоммиченные изменения, которые будут перезаписаны.\n" +
+            "Сначала закоммить изменения или сделай git stash.";
+        }
+
+        void vscode.window.showErrorMessage(friendly);
+      } else {
+        void vscode.window.showErrorMessage(
+          `Git Panel: не удалось выполнить действие с веткой (${message})`,
+        );
+      }
     }
   }
   private async confirmAndPush(branch: string): Promise<void> {
