@@ -45,7 +45,6 @@ function render() {
 
   const branchesColumn = document.createElement("div");
   branchesColumn.className = "column column--branches";
-  branchesColumn.style.flexBasis = `${state.layout.left * 100}%`;
 
   const branchesHeader = document.createElement("div");
   branchesHeader.className = "column-header";
@@ -83,6 +82,7 @@ function render() {
     renderBranchTree(root, branchesList, 0);
   }
 
+  
   branchesColumn.appendChild(branchesList);
 
   const resizerLeft = createLeftResizer();
@@ -143,11 +143,10 @@ function render() {
       const dot = document.createElement("div");
       dot.className = "commit-dot";
       const color = getColorForLane(lane);
+      // Всегда рисуем полностью залитые точки цвета линии.
       dot.style.borderColor = color;
-      dot.style.backgroundColor = state.selectedCommits.includes(commit.hash)
-        ? color
-        : "transparent";
-      dot.style.transform = `translateX(${lane * 10}px)`;
+      dot.style.backgroundColor = color;
+      dot.style.transform = `translateX(${lane * LANE_SPACING}px)`;
       timeline.appendChild(dot);
 
       const line = document.createElement("div");
@@ -156,7 +155,7 @@ function render() {
         line.classList.add("commit-line--last");
       }
       line.style.backgroundColor = color;
-      line.style.transform = `translateX(${lane * 10}px)`;
+      line.style.transform = `translateX(${lane * LANE_SPACING}px)`;
       timeline.appendChild(line);
 
       const content = document.createElement("div");
@@ -195,6 +194,13 @@ function render() {
       commitRows.push({ hash: commit.hash, lane, item });
     });
 
+    attachGraphListenersOnce();
+    lastGraphSnapshot = {
+      container: commitsList,
+      rows: commitRows,
+      laneInfo,
+      commits,
+    };
     drawCommitConnections(commitsList, commitRows, laneInfo, commits);
   }
 
@@ -202,8 +208,17 @@ function render() {
 
   const detailsColumn = document.createElement("div");
   detailsColumn.className = "column column--details";
-  detailsColumn.style.flexBasis = `${state.layout.right * 100}%`;
   renderDetailsColumn(detailsColumn);
+
+  // Применяем текущий layout к трём колонкам.
+  // Левая — ветки, правая — детали, середина — коммиты.
+  const leftWidth = state.layout.left;
+  const rightWidth = state.layout.right;
+  const middleWidth = Math.max(0, 1 - leftWidth - rightWidth);
+
+  branchesColumn.style.flex = `0 0 ${leftWidth * 100}%`;
+  commitsColumn.style.flex = `0 0 ${middleWidth * 100}%`;
+  detailsColumn.style.flex = `0 0 ${rightWidth * 100}%`;
 
   container.appendChild(branchesColumn);
   container.appendChild(resizerLeft);
@@ -511,6 +526,37 @@ const laneColors = [
   "#ff5555",
 ];
 
+// Горизонтальное расстояние между дорожками графа коммитов
+const LANE_SPACING = 12;
+
+/** @type {{
+ *   container: HTMLDivElement;
+ *   rows: { hash: string; lane: number; item: HTMLDivElement }[];
+ *   laneInfo: Record<string, { lane: number }>;
+ *   commits: any[];
+ * } | null} */
+let lastGraphSnapshot = null;
+let graphGlobalListenersAttached = false;
+
+function redrawGraphFromSnapshot() {
+  if (!lastGraphSnapshot) return;
+  const { container, rows, laneInfo, commits } = lastGraphSnapshot;
+  if (!container || !container.isConnected) {
+    return;
+  }
+  drawCommitConnections(container, rows, laneInfo, commits);
+}
+
+function attachGraphListenersOnce() {
+  if (graphGlobalListenersAttached) return;
+  graphGlobalListenersAttached = true;
+
+  window.addEventListener("resize", () => {
+    // Перерисовываем линии при изменении размеров webview/окна.
+    requestAnimationFrame(redrawGraphFromSnapshot);
+  });
+}
+
 function openBranchContextMenu(x, y, branch) {
   closeContextMenu();
 
@@ -536,6 +582,18 @@ function openBranchContextMenu(x, y, branch) {
     vscode.postMessage({
       type: "branchAction",
       action: "newBranch",
+      branch,
+    });
+    closeContextMenu();
+  };
+
+  const rename = document.createElement("div");
+  rename.className = "context-menu-item";
+  rename.textContent = "Rename";
+  rename.onclick = () => {
+    vscode.postMessage({
+      type: "branchAction",
+      action: "rename",
       branch,
     });
     closeContextMenu();
@@ -579,6 +637,7 @@ function openBranchContextMenu(x, y, branch) {
 
   menu.appendChild(checkout);
   menu.appendChild(newBranch);
+  menu.appendChild(rename);
   menu.appendChild(del);
   menu.appendChild(pull);
   menu.appendChild(push);
@@ -834,9 +893,17 @@ function drawCommitConnections(container, rows, laneInfo, commits) {
     existing.remove();
   }
 
+  const bounds = container.getBoundingClientRect();
+  // Если контейнер ещё не отрисован (ширина/высота = 0), пробуем перерисовать на следующем кадре.
+  if (!bounds.width || !bounds.height) {
+    requestAnimationFrame(() =>
+      drawCommitConnections(container, rows, laneInfo, commits),
+    );
+    return;
+  }
+
   const svg = document.createElementNS(ns, "svg");
   svg.classList.add("graph-overlay");
-  const bounds = container.getBoundingClientRect();
   svg.setAttribute("width", String(bounds.width));
   svg.setAttribute("height", String(bounds.height));
   svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
@@ -848,6 +915,8 @@ function drawCommitConnections(container, rows, laneInfo, commits) {
   rows.forEach((row) => {
     const dot = row.item.querySelector(".commit-dot");
     if (!dot) return;
+    // Привязываем координаты к DOM‑элементам точек, чтобы при скролле и изменении размера
+    // линии всегда соединяли реальные позиции кружков.
     const r = dot.getBoundingClientRect();
     const x = r.left - rect.left + r.width / 2;
     const y = r.top - rect.top + r.height / 2;
@@ -866,8 +935,10 @@ function drawCommitConnections(container, rows, laneInfo, commits) {
       if (!to) return;
       const path = document.createElementNS(ns, "path");
       path.setAttribute("class", "graph-edge");
-      path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke", color);
+        path.setAttribute("stroke-width", "2.5");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
       // если лейн тот же — рисуем прямую вертикаль/диагональ
       const parentLane = laneInfo[p]?.lane ?? lane;
       if (parentLane === lane) {
@@ -954,7 +1025,17 @@ function createRightResizer() {
     const total = window.innerWidth || 1;
     const delta = dx / total;
     let nextRight = startRight - delta;
+
+    // Ограничения на саму колонку деталей
     nextRight = Math.min(0.45, Math.max(0.15, nextRight));
+
+    // Не даём колонке коммитов схлопнуться: минимум 0.3
+    const minCommits = 0.3;
+    const maxRight = 1 - state.layout.left - minCommits;
+    if (nextRight > maxRight) {
+      nextRight = maxRight;
+    }
+
     state.layout.right = nextRight;
     render();
   };
