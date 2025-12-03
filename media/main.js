@@ -300,7 +300,8 @@ function buildBranchTree(branchNames) {
 
   const others = [];
   branchNames.forEach((name) => {
-    if (name === "main") {
+    // считаем "главной" первую найденную main/master
+    if (!mainBranch && (name === "main" || name === "master")) {
       mainBranch = name;
     } else {
       others.push(name);
@@ -354,6 +355,17 @@ function buildBranchTree(branchNames) {
 
   function sortNode(node) {
     node.branches.sort((a, b) => a.label.localeCompare(b.label));
+
+    // активная ветка (HEAD) в рамках своей группы всегда первая
+    if (state.headBranch) {
+      const idx = node.branches.findIndex(
+        (b) => b.fullName === state.headBranch,
+      );
+      if (idx > 0) {
+        const [active] = node.branches.splice(idx, 1);
+        node.branches.unshift(active);
+      }
+    }
 
     const entries = Array.from(node.folders.entries());
     entries.sort((a, b) => a[0].localeCompare(b[0]));
