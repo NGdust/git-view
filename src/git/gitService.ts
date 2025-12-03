@@ -174,7 +174,7 @@ export class GitService {
     });
   }
 
-  public async deleteBranch(branch: string): Promise<void> {
+  public async deleteBranch(branch: string, force = false): Promise<void> {
     if (!(await this.isGitRepo()) || !this.cwd) {
       return;
     }
