@@ -161,12 +161,33 @@ export class GitService {
     });
   }
 
-  public async deleteBranch(branch: string): Promise<void> {
+  public async deleteBranch(branch: string, force = false): Promise<void> {
     if (!(await this.isGitRepo()) || !this.cwd) {
       return;
     }
 
-    await execFileAsync("git", ["branch", "-d", branch], { cwd: this.cwd });
+    const args = force ? ["branch", "-D", branch] : ["branch", "-d", branch];
+
+    try {
+      await execFileAsync("git", args, { cwd: this.cwd });
+    } catch (error: unknown) {
+      const err = error as { stderr?: string };
+      const stderr = (err.stderr ?? "").toString();
+
+      // Если ветка не полностью слита — даём возможность UI спросить
+      // про принудительное удаление.
+      if (
+        !force &&
+        /not fully merged|is not fully merged/i.test(stderr)
+      ) {
+        const e = new Error("BRANCH_NOT_FULLY_MERGED");
+        // помечаем код ошибки, чтобы отличить в extension
+        (e as any).code = "BRANCH_NOT_FULLY_MERGED";
+        throw e;
+      }
+
+      throw error;
+    }
   }
 
   public async resetToCommit(hash: string): Promise<void> {

@@ -132,6 +132,21 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
           break;
         }
         case "delete": {
+          // Нельзя удалять текущую активную ветку — сначала нужно переключиться.
+          try {
+            const branches = await this.git.getBranches();
+            const active = branches.find((b) => b.current)?.name;
+            if (active === branch) {
+              void vscode.window.showWarningMessage(
+                `Нельзя удалить активную ветку "${branch}". Сначала переключитесь на другую ветку.`,
+              );
+              return;
+            }
+          } catch {
+            // если не смогли прочитать ветки — просто продолжим,
+            // git сам вернёт ошибку, которую мы обработаем ниже
+          }
+
           const answer = await vscode.window.showWarningMessage(
             `Удалить ветку "${branch}"?`,
             { modal: true },
@@ -142,7 +157,26 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
             return;
           }
 
-          await this.git.deleteBranch(branch);
+          try {
+            await this.git.deleteBranch(branch);
+          } catch (error: unknown) {
+            const code = (error as { code?: string }).code;
+            if (code === "BRANCH_NOT_FULLY_MERGED") {
+              const forceAnswer = await vscode.window.showWarningMessage(
+                `Ветка "${branch}" не полностью слита. Удалить её принудительно? Это может безвозвратно изменить историю.`,
+                { modal: true },
+                "Удалить принудительно",
+                "Отмена",
+              );
+              if (forceAnswer !== "Удалить принудительно") {
+                return;
+              }
+              await this.git.deleteBranch(branch, true);
+            } else {
+              throw error;
+            }
+          }
+
           if (this._currentBranch === branch) {
             this._currentBranch = undefined;
           }
