@@ -5,7 +5,8 @@ const vscode = acquireVsCodeApi();
 const root = document.getElementById("root");
 
 /** @type {{
-  branches: string[];
+  branches: string[]; // локальные ветки
+  remoteBranches?: string[]; // удалённые ветки (origin/...)
   commitsByBranch: Record<string, any[]>;
   currentBranch?: string; // для обратной совместимости, фактически selectedBranch
   headBranch?: string; // реальная текущая ветка в репозитории
@@ -18,6 +19,7 @@ const root = document.getElementById("root");
 }} */
 let state = {
   branches: [],
+  remoteBranches: [],
   commitsByBranch: {},
   currentBranch: undefined,
   headBranch: undefined,
@@ -48,38 +50,56 @@ function render() {
 
   const branchesHeader = document.createElement("div");
   branchesHeader.className = "column-header";
-  branchesHeader.textContent = "Branches";
+  const branchesTitle = document.createElement("span");
+  branchesTitle.textContent = "Branches";
+  branchesHeader.appendChild(branchesTitle);
+
+  const refreshButton = document.createElement("button");
+  refreshButton.className = "branches-refresh-button";
+  refreshButton.title = "Fetch branches from remote";
+  refreshButton.innerHTML = "⟳";
+  refreshButton.onclick = () => {
+    vscode.postMessage({ type: "refreshFromRemote" });
+  };
+  branchesHeader.appendChild(refreshButton);
+
   branchesColumn.appendChild(branchesHeader);
 
   const branchesList = document.createElement("div");
   branchesList.className = "list";
 
-  if (state.branches.length === 0) {
+  const localBranches = state.branches || [];
+  const remoteBranches = state.remoteBranches || [];
+
+  if (localBranches.length === 0 && remoteBranches.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "Локальные ветки не найдены.";
+    empty.textContent = "Ветки не найдены.";
     branchesList.appendChild(empty);
   } else {
     if (!state.expandedFolders) {
       state.expandedFolders = {};
     }
 
-    const { mainBranch, root } = buildBranchTree(state.branches);
+    renderBranchSection(
+      {
+        id: "__group_local",
+        title: "Local",
+        initiallyExpanded: true,
+      },
+      localBranches,
+      branchesList,
+    );
 
-    // main всегда сверху
-    if (mainBranch) {
-      const mainItem = createBranchItem({
-        fullName: mainBranch,
-        label: mainBranch,
-        level: 0,
-        isMain: true,
-        unpushed:
-          (state.unpushedCounts && state.unpushedCounts[mainBranch]) || 0,
-      });
-      branchesList.appendChild(mainItem);
-    }
-
-    renderBranchTree(root, branchesList, 0);
+    renderBranchSection(
+      {
+        id: "__group_remote",
+        title: "Remote",
+        initiallyExpanded: false,
+      },
+      remoteBranches,
+      branchesList,
+    );
   }
 
   
@@ -377,6 +397,62 @@ function buildBranchTree(branchNames) {
   sortNode(root);
 
   return { mainBranch, root };
+}
+
+/**
+ * Рисует секцию веток (Local/Remote) с возможностью сворачивать/разворачивать.
+ *
+ * @param {{ id: string; title: string; initiallyExpanded: boolean }} group
+ * @param {string[]} branchNames
+ * @param {HTMLDivElement} container
+ */
+function renderBranchSection(group, branchNames, container) {
+  const header = document.createElement("div");
+  header.className = "branch-group-header";
+
+  const arrow = document.createElement("span");
+  arrow.className = "folder-arrow";
+
+  if (typeof state.expandedFolders[group.id] === "undefined") {
+    state.expandedFolders[group.id] = group.initiallyExpanded;
+  }
+
+  const expanded = !!state.expandedFolders[group.id];
+  arrow.textContent = expanded ? "▾" : "▸";
+
+  const label = document.createElement("span");
+  label.className = "branch-group-title";
+  label.textContent = group.title;
+
+  header.appendChild(arrow);
+  header.appendChild(label);
+
+  header.onclick = () => {
+    state.expandedFolders[group.id] = !expanded;
+    render();
+  };
+
+  container.appendChild(header);
+
+  if (!expanded || branchNames.length === 0) {
+    return;
+  }
+
+  const { mainBranch, root } = buildBranchTree(branchNames);
+
+  if (mainBranch) {
+    const mainItem = createBranchItem({
+      fullName: mainBranch,
+      label: mainBranch,
+      level: 0,
+      isMain: group.id === "__group_local",
+      unpushed:
+        (state.unpushedCounts && state.unpushedCounts[mainBranch]) || 0,
+    });
+    container.appendChild(mainItem);
+  }
+
+  renderBranchTree(root, container, 0);
 }
 
 function renderBranchTree(node, container, level) {

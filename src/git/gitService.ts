@@ -92,6 +92,28 @@ export class GitService {
       });
   }
 
+  public async getRemoteBranches(): Promise<string[]> {
+    if (!(await this.isGitRepo())) {
+      return [];
+    }
+
+    const { stdout } = await execFileAsync(
+      "git",
+      ["branch", "-r", "--format=%(refname:short)"],
+      { cwd: this.cwd },
+    );
+
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(
+        (line) =>
+          line &&
+          // отфильтровываем служебные ссылки вроде origin/HEAD -> origin/main
+          !line.includes(" -> "),
+      );
+  }
+
   public async getCommits(branch: string, maxCount = 50): Promise<GitCommit[]> {
     if (!(await this.isGitRepo())) {
       return [];
@@ -267,6 +289,14 @@ export class GitService {
     await execFileAsync("git", args, {
       cwd: this.cwd,
     });
+  }
+
+  public async fetchAll(): Promise<void> {
+    if (!(await this.isGitRepo()) || !this.cwd) {
+      return;
+    }
+
+    await execFileAsync("git", ["fetch", "--all", "-p"], { cwd: this.cwd });
   }
 
   public async getUnpushedCommits(

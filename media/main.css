@@ -61,6 +61,9 @@ body {
   letter-spacing: 0.05em;
   color: var(--vscode-descriptionForeground);
   border-bottom: 1px solid var(--vscode-panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .list {
@@ -261,6 +264,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 2px 0;
+  cursor: pointer;
 }
 
 .details-folder-name {
@@ -271,6 +275,37 @@ body {
   padding: 2px 0;
   font-size: 12px;
   color: #8be9fd;
+  cursor: pointer;
+}
+
+.branch-group-header {
+  padding: 4px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vscode-descriptionForeground);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.branch-group-title {
+  flex: 1;
+}
+
+.branches-refresh-button {
+  border: none;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  margin-left: 6px;
+}
+
+.branches-refresh-button:hover {
+  color: var(--vscode-foreground);
 }
 
 .details-meta {

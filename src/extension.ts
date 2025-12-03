@@ -69,6 +69,9 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         case "openFileSource":
           await this.openFileInEditor(message.file);
           break;
+        case "refreshFromRemote":
+          await this.refreshFromRemote();
+          break;
         case "requestCommitDetails":
           await this.sendCommitDetails(message.hash);
           break;
@@ -240,6 +243,21 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
           `Git Panel: не удалось выполнить действие с веткой (${message})`,
         );
       }
+    }
+  }
+
+  private async refreshFromRemote(): Promise<void> {
+    try {
+      await this.git.fetchAll();
+      await this.pushState();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Неизвестная ошибка git fetch";
+      // eslint-disable-next-line no-console
+      console.error("Git fetch failed", error);
+      void vscode.window.showErrorMessage(
+        `Git Panel: не удалось обновить ветки с remote (${message})`,
+      );
     }
   }
   private async confirmAndPush(branch: string): Promise<void> {
@@ -426,18 +444,55 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
     relativePath: string,
   ): Promise<void> {
     try {
-      const diffText = await this.git.getDiffForFile(hash, relativePath);
-      if (!diffText) {
+      const workspaceFolderUri =
+        vscode.workspace.workspaceFolders?.[0]?.uri ?? undefined;
+      if (!workspaceFolderUri) {
+        return;
+      }
+
+      const workingUri = vscode.Uri.joinPath(workspaceFolderUri, relativePath);
+
+      let workingDoc: vscode.TextDocument;
+      try {
+        workingDoc = await vscode.workspace.openTextDocument(workingUri);
+      } catch {
         void vscode.window.showWarningMessage(
-          `Нет diff для файла ${relativePath} в коммите ${hash.slice(0, 7)}`,
+          `Не удалось открыть рабочую версию файла ${relativePath}`,
         );
         return;
       }
-      const doc = await vscode.workspace.openTextDocument({
-        content: diffText,
-        language: "diff",
+
+      const fileContentAtCommit = await this.git.getFileContentAt(
+        hash,
+        relativePath,
+      );
+
+      if (fileContentAtCommit === "") {
+        void vscode.window.showWarningMessage(
+          `Нет содержимого файла ${relativePath} в коммите ${hash.slice(
+            0,
+            7,
+          )}`,
+        );
+        return;
+      }
+
+      const leftDoc = await vscode.workspace.openTextDocument({
+        content: fileContentAtCommit,
+        language: workingDoc.languageId,
       });
-      await vscode.window.showTextDocument(doc, { preview: false });
+
+      const title = `${relativePath} (${hash.slice(
+        0,
+        7,
+      )}) ↔ Working Tree`;
+
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        leftDoc.uri,
+        workingDoc.uri,
+        title,
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Неизвестная ошибка diff";
@@ -475,6 +530,7 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
     }
 
     const branches = await this.git.getBranches();
+    const remoteBranches = await this.git.getRemoteBranches();
     const headBranch = branches.find((b) => b.current)?.name;
     const selectedBranch =
       this._currentBranch ?? headBranch ?? branches[0]?.name;
@@ -515,6 +571,7 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
       type: "state",
       payload: {
         branches: branches.map((b) => b.name),
+        remoteBranches,
         commitsByBranch: selectedBranch ? { [selectedBranch]: commits } : {},
         currentBranch: selectedBranch,
         headBranch,
