@@ -291,14 +291,6 @@ export class GitService {
     });
   }
 
-  public async fetchAll(): Promise<void> {
-    if (!(await this.isGitRepo()) || !this.cwd) {
-      return;
-    }
-
-    await execFileAsync("git", ["fetch", "--all", "-p"], { cwd: this.cwd });
-  }
-
   public async getUnpushedCommits(
     branch: string,
     maxCount = 50,

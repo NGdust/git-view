@@ -49,19 +49,8 @@ function render() {
   branchesColumn.className = "column column--branches";
 
   const branchesHeader = document.createElement("div");
-  branchesHeader.className = "column-header";
-  const branchesTitle = document.createElement("span");
-  branchesTitle.textContent = "Branches";
-  branchesHeader.appendChild(branchesTitle);
-
-  const refreshButton = document.createElement("button");
-  refreshButton.className = "branches-refresh-button";
-  refreshButton.title = "Fetch branches from remote";
-  refreshButton.innerHTML = "⟳";
-  refreshButton.onclick = () => {
-    vscode.postMessage({ type: "refreshFromRemote" });
-  };
-  branchesHeader.appendChild(refreshButton);
+  branchesHeader.className = "column-header column-header--branches";
+  branchesHeader.textContent = "Branches";
 
   branchesColumn.appendChild(branchesHeader);
 
@@ -270,9 +259,17 @@ function createBranchItem(options) {
   const row = document.createElement("div");
   row.className = isHead ? "current-branch-row" : "";
 
-  if (isHead) {
+  const isActive = isSelected;
+
+  if (isActive) {
+    const icon = createActiveBranchIcon();
+    row.appendChild(icon);
+  } else if (isHead) {
     const icon = createCurrentBranchIcon();
     row.appendChild(icon);
+  } else {
+    const branchIcon = createBranchGraphIcon();
+    row.appendChild(branchIcon);
   }
 
   const labelEl = document.createElement("span");
@@ -444,7 +441,7 @@ function renderBranchSection(group, branchNames, container) {
     const mainItem = createBranchItem({
       fullName: mainBranch,
       label: mainBranch,
-      level: 0,
+      level: 2,
       isMain: group.id === "__group_local",
       unpushed:
         (state.unpushedCounts && state.unpushedCounts[mainBranch]) || 0,
@@ -452,7 +449,7 @@ function renderBranchSection(group, branchNames, container) {
     container.appendChild(mainItem);
   }
 
-  renderBranchTree(root, container, 0);
+  renderBranchTree(root, container, 2);
 }
 
 function renderBranchTree(node, container, level) {
@@ -583,8 +580,44 @@ function createCurrentBranchIcon() {
   svg.setAttribute("class", "current-branch-icon");
 
   const path = document.createElementNS(svgNS, "path");
+  // жёлтая корона с тремя зубцами
+  path.setAttribute(
+    "d",
+    // основание короны
+    "M1 7.5 L1.2 3.5 L3.2 5.2 L5 2.5 L6.8 5.2 L8.8 3.5 L9 7.5 Z",
+  );
+
+  svg.appendChild(path);
+  return svg;
+}
+
+function createActiveBranchIcon() {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 10 10");
+  svg.setAttribute("class", "active-branch-icon");
+
+  const path = document.createElementNS(svgNS, "path");
   // жёлтый кружок
   path.setAttribute("d", "M5 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z");
+
+  svg.appendChild(path);
+  return svg;
+}
+
+function createBranchGraphIcon() {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("class", "branch-graph-icon");
+
+  // Простая иконка ветки git: вертикальный ствол и одно ответвление вправо с одной точкой.
+  const path = document.createElementNS(svgNS, "path");
+  path.setAttribute(
+    "d",
+    // левая вертикаль с двумя точками и одна боковая точка справа
+    "M5 3a1.5 1.5 0 1 1-1 0v7a1.5 1.5 0 1 1 1 0V8h3a1.5 1.5 0 1 0 0-1H5V3Z",
+  );
 
   svg.appendChild(path);
   return svg;

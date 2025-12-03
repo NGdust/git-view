@@ -69,9 +69,6 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
         case "openFileSource":
           await this.openFileInEditor(message.file);
           break;
-        case "refreshFromRemote":
-          await this.refreshFromRemote();
-          break;
         case "requestCommitDetails":
           await this.sendCommitDetails(message.hash);
           break;
@@ -243,21 +240,6 @@ class GitPanelViewProvider implements vscode.WebviewViewProvider {
           `Git Panel: не удалось выполнить действие с веткой (${message})`,
         );
       }
-    }
-  }
-
-  private async refreshFromRemote(): Promise<void> {
-    try {
-      await this.git.fetchAll();
-      await this.pushState();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Неизвестная ошибка git fetch";
-      // eslint-disable-next-line no-console
-      console.error("Git fetch failed", error);
-      void vscode.window.showErrorMessage(
-        `Git Panel: не удалось обновить ветки с remote (${message})`,
-      );
     }
   }
   private async confirmAndPush(branch: string): Promise<void> {

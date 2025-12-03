@@ -61,9 +61,6 @@ body {
   letter-spacing: 0.05em;
   color: var(--vscode-descriptionForeground);
   border-bottom: 1px solid var(--vscode-panel-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .list {
@@ -160,7 +157,7 @@ body {
 }
 
 .folder-arrow {
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.7;
 }
 
@@ -173,10 +170,6 @@ body {
   height: 12px;
   fill: currentColor;
   opacity: 0.9;
-}
-
-.folder-children {
-  /* визуально отделяем вложенные элементы от родителя отступом */
 }
 
 .context-menu {
@@ -221,6 +214,21 @@ body {
   fill: #e0c06f;
   stroke: #e0c06f;
   stroke-width: 1;
+}
+
+.active-branch-icon {
+  width: 10px;
+  height: 10px;
+  fill: #e0c06f;
+  stroke: #e0c06f;
+  stroke-width: 1;
+}
+
+.branch-graph-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.9;
 }
 
 .branch-unpushed {
@@ -269,17 +277,18 @@ body {
 
 .details-folder-name {
   flex: 1;
+  color: var(--vscode-descriptionForeground);
 }
 
 .details-file {
   padding: 2px 0;
   font-size: 12px;
-  color: #8be9fd;
+  color: var(--vscode-textLink-foreground);
   cursor: pointer;
 }
 
 .branch-group-header {
-  padding: 4px 8px;
+  padding: 6px 8px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -306,6 +315,12 @@ body {
 
 .branches-refresh-button:hover {
   color: var(--vscode-foreground);
+}
+
+.column-header--branches {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .details-meta {
